@@ -101,6 +101,11 @@ export async function activate(context: vscode.ExtensionContext) {
         () => commandHandler.handlePerformanceBenchmark()
     );
 
+    // 注册命令：简单功能测试
+    const simpleTestCommand = vscode.commands.registerCommand('mybatis-er.simpleTest', 
+        () => commandHandler.handleSimpleTest()
+    );
+
     // 监听配置变更
     const configChangeDisposable = configManager.onConfigChanged((newConfig) => {
         Logger.info('配置已变更，重新应用设置', newConfig);
@@ -130,6 +135,7 @@ export async function activate(context: vscode.ExtensionContext) {
         clearCacheCommand,
         testWebViewCommand,
         performanceBenchmarkCommand,
+        simpleTestCommand,
         configChangeDisposable,
         workspaceChangeDisposable,
         // 添加清理函数

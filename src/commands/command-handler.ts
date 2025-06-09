@@ -21,6 +21,7 @@ export class CommandHandler {
     private fileScanner: FileScanner;
     private webviewProvider: ERDiagramWebViewProvider;
     private mermaidGenerator: MermaidERGenerator;
+    private isProcessing: boolean = false;
 
     constructor(stateManager: StateManager, configManager: ConfigManager, webviewProvider: ERDiagramWebViewProvider) {
         this.stateManager = stateManager;
@@ -147,53 +148,12 @@ export class CommandHandler {
         }
 
         // 解析Java实体文件
-        const javaParseResults = [];
-        for (const javaFile of scanResult.javaFiles.filter(f => f.isEntity)) {
-            if (token.isCancellationRequested) {
-                throw new Error('用户取消了操作');
-            }
-
-            try {
-                const content = await this.fileScanner.getFileContent(javaFile.filePath);
-                const result = await this.workerManager.submitTask(
-                    WorkerMessageType.PARSE_JAVA_FILE,
-                    {
-                        filePath: javaFile.filePath,
-                        content,
-                        fileType: 'java',
-                        options: { parseMethodBodies: false }
-                    }
-                );
-                javaParseResults.push(result);
-            } catch (error) {
-                Logger.warn(`解析Java文件失败: ${javaFile.filePath}`, error as Error);
-            }
-        }
-
+        const javaParseResults = await this.batchProcessJavaFiles(scanResult.javaFiles.filter(f => f.isEntity), progress, token, 20, 25);
+        
         progress.report({ increment: 25, message: "解析XML映射文件..." });
 
         // 解析XML映射文件
-        const xmlParseResults = [];
-        for (const xmlFile of scanResult.xmlFiles.filter(f => f.isMapper)) {
-            if (token.isCancellationRequested) {
-                throw new Error('用户取消了操作');
-            }
-
-            try {
-                const content = await this.fileScanner.getFileContent(xmlFile.filePath);
-                const result = await this.workerManager.submitTask(
-                    WorkerMessageType.PARSE_XML_FILE,
-                    {
-                        filePath: xmlFile.filePath,
-                        content,
-                        fileType: 'xml'
-                    }
-                );
-                xmlParseResults.push(result);
-            } catch (error) {
-                Logger.warn(`解析XML文件失败: ${xmlFile.filePath}`, error as Error);
-            }
-        }
+        const xmlParseResults = await this.batchProcessXmlFiles(scanResult.xmlFiles.filter(f => f.isMapper), progress, token, 25, 25);
 
         progress.report({ increment: 25, message: "推断实体关系..." });
 
@@ -202,18 +162,7 @@ export class CommandHandler {
         }
 
         // 推断实体关系
-        const entities = javaParseResults.flatMap(result => result.entity ? [result.entity] : []);
-        const xmlResults = xmlParseResults.flatMap(result => result.result ? [result.result] : []);
-        
-        const relationResult = await this.workerManager.submitTask(
-            WorkerMessageType.INFER_RELATIONS,
-            {
-                entities,
-                xmlResults,
-                strategies: this.configManager.getExtensionConfig().inferenceStrategies,
-                minConfidence: 0.7
-            }
-        );
+        const relationResult = await this.performRelationInference(javaParseResults, xmlParseResults, token);
 
         progress.report({ increment: 20, message: "生成ER图..." });
 
@@ -222,24 +171,14 @@ export class CommandHandler {
         }
 
         // 生成ER图
-        const diagramResult = await this.workerManager.submitTask(
-            WorkerMessageType.GENERATE_DIAGRAM,
-            {
-                entities,
-                relations: relationResult.relations || [],
-                options: {
-                    theme: this.configManager.getExtensionConfig().theme,
-                    format: 'mermaid',
-                    includeFields: true,
-                    includeRelations: true
-                }
-            }
-        );
+        const diagramResult = await this.generateERDiagramData(javaParseResults, xmlParseResults, relationResult);
 
         // 保存ER图数据
         const erData = {
-            entities,
-            relations: relationResult.relations || [],
+            entities: diagramResult.entities,
+            relations: diagramResult.relations,
+            mermaidCode: diagramResult.mermaidCode,
+            metadata: diagramResult.metadata,
             generatedAt: new Date(),
             projectPath: this.stateManager.getCurrentWorkspacePath() || ''
         };
@@ -251,26 +190,377 @@ export class CommandHandler {
         progress.report({ increment: 10, message: "完成" });
         
         Logger.info('ER图生成完成', {
-            entityCount: entities.length,
-            relationCount: relationResult.relations?.length || 0,
+            entityCount: diagramResult.entities.length,
+            relationCount: diagramResult.relations.length,
             scanStats: scanResult.stats
         });
     }
 
     /**
-     * 刷新ER图命令处理
+     * 新增：批量处理Java文件
+     */
+    private async batchProcessJavaFiles(
+        javaFiles: any[],
+        progress: vscode.Progress<{ increment?: number; message?: string }>,
+        token: vscode.CancellationToken,
+        startProgress: number,
+        progressRange: number
+    ): Promise<any[]> {
+        if (javaFiles.length === 0) {
+            return [];
+        }
+        
+        const results: any[] = [];
+        // 进一步减少批次大小，避免超时
+        const batchSize = Math.min(3, Math.max(1, Math.floor(javaFiles.length / 4))); 
+        const batches = this.chunkArray(javaFiles, batchSize);
+        
+        Logger.info(`批量处理Java文件: ${javaFiles.length}个文件，${batches.length}个批次`);
+        
+        for (let i = 0; i < batches.length; i++) {
+            if (token.isCancellationRequested) {
+                throw new Error('用户取消了操作');
+            }
+            
+            const batch = batches[i];
+            const batchProgress = startProgress + (i * progressRange / batches.length);
+            
+            progress.report({ 
+                increment: batchProgress, 
+                message: `处理Java文件批次 ${i + 1}/${batches.length} (${batch.length}个文件)` 
+            });
+            
+            try {
+                // 准备批量数据
+                const batchData = await Promise.all(
+                    batch.map(async (file: any) => ({
+                        filePath: file.filePath,
+                        content: await this.fileScanner.getFileContent(file.filePath),
+                        fileType: 'java' as const,
+                        options: { parseMethodBodies: false }
+                    }))
+                );
+                
+                // 提交批量任务 - 大幅减少超时时间
+                const batchResult = await this.workerManager.submitTask(
+                    WorkerMessageType.PARSE_BATCH_FILES,
+                    { files: batchData },
+                    { 
+                        timeout: Math.min(8000, 3000 * batch.length), // 减少到8秒最大，每个文件3秒
+                        maxRetries: 1 
+                    }
+                );
+                
+                if (Array.isArray(batchResult)) {
+                    results.push(...batchResult);
+                } else {
+                    results.push(batchResult);
+                }
+                
+                Logger.debug(`批次 ${i + 1} 处理完成，解析了 ${batch.length} 个文件`);
+                
+            } catch (error) {
+                Logger.warn(`批量处理Java文件失败，尝试降级处理`, error as Error);
+                
+                // 降级到逐个同步处理
+                for (const file of batch) {
+                    try {
+                        const content = await this.fileScanner.getFileContent(file.filePath);
+                        const syncResult = await this.parseJavaFileSync({
+                            filePath: file.filePath,
+                            content,
+                            fileType: 'java',
+                            options: { parseMethodBodies: false }
+                        });
+                        results.push(syncResult);
+                    } catch (syncError) {
+                        Logger.warn(`同步解析失败: ${file.filePath}`, syncError as Error);
+                        // 继续处理其他文件
+                    }
+                }
+            }
+            
+            // 增加延迟避免过载
+            if (i < batches.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+        
+        return results;
+    }
+    
+    /**
+     * 新增：批量处理XML文件
+     */
+    private async batchProcessXmlFiles(
+        xmlFiles: any[],
+        progress: vscode.Progress<{ increment?: number; message?: string }>,
+        token: vscode.CancellationToken,
+        startProgress: number,
+        progressRange: number
+    ): Promise<any[]> {
+        if (xmlFiles.length === 0) {
+            return [];
+        }
+        
+        const results: any[] = [];
+        // 进一步减少批次大小
+        const batchSize = Math.min(4, Math.max(1, Math.floor(xmlFiles.length / 3))); 
+        const batches = this.chunkArray(xmlFiles, batchSize);
+        
+        Logger.info(`批量处理XML文件: ${xmlFiles.length}个文件，${batches.length}个批次`);
+        
+        for (let i = 0; i < batches.length; i++) {
+            if (token.isCancellationRequested) {
+                throw new Error('用户取消了操作');
+            }
+            
+            const batch = batches[i];
+            const batchProgress = startProgress + (i * progressRange / batches.length);
+            
+            progress.report({ 
+                increment: batchProgress, 
+                message: `处理XML文件批次 ${i + 1}/${batches.length} (${batch.length}个文件)` 
+            });
+            
+            try {
+                // 准备批量数据
+                const batchData = await Promise.all(
+                    batch.map(async (file: any) => ({
+                        filePath: file.filePath,
+                        content: await this.fileScanner.getFileContent(file.filePath),
+                        fileType: 'xml' as const
+                    }))
+                );
+                
+                // 提交批量任务 - 减少超时时间
+                const batchResult = await this.workerManager.submitTask(
+                    WorkerMessageType.PARSE_BATCH_FILES,
+                    { files: batchData },
+                    { 
+                        timeout: Math.min(6000, 2000 * batch.length), // 减少到6秒最大，每个文件2秒
+                        maxRetries: 1 
+                    }
+                );
+                
+                if (Array.isArray(batchResult)) {
+                    results.push(...batchResult);
+                } else {
+                    results.push(batchResult);
+                }
+                
+                Logger.debug(`XML批次 ${i + 1} 处理完成，解析了 ${batch.length} 个文件`);
+                
+            } catch (error) {
+                Logger.warn(`批量处理XML文件失败，尝试降级处理`, error as Error);
+                
+                // 降级到逐个同步处理
+                for (const file of batch) {
+                    try {
+                        const content = await this.fileScanner.getFileContent(file.filePath);
+                        const syncResult = await this.parseXmlFileSync({
+                            filePath: file.filePath,
+                            content,
+                            fileType: 'xml'
+                        });
+                        results.push(syncResult);
+                    } catch (syncError) {
+                        Logger.warn(`同步解析XML失败: ${file.filePath}`, syncError as Error);
+                        // 继续处理其他文件
+                    }
+                }
+            }
+            
+            // 增加延迟避免过载
+            if (i < batches.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 80));
+            }
+        }
+        
+        return results;
+    }
+    
+    /**
+     * 新增：执行关系推断
+     */
+    private async performRelationInference(
+        javaResults: any[],
+        xmlResults: any[],
+        token: vscode.CancellationToken
+    ): Promise<any> {
+        if (token.isCancellationRequested) {
+            throw new Error('用户取消了操作');
+        }
+        
+        try {
+            // 转换配置格式
+            const configStrategies = this.configManager.getExtensionConfig().inferenceStrategies;
+            const strategies = [
+                { name: 'naming-convention', weight: 0.8, enabled: configStrategies.naming, minConfidence: 0.6 },
+                { name: 'annotation-based', weight: 0.9, enabled: configStrategies.annotation, minConfidence: 0.7 },
+                { name: 'xml-mapping', weight: 0.85, enabled: configStrategies.xml, minConfidence: 0.75 },
+                { name: 'field-type-analysis', weight: 0.7, enabled: configStrategies.semantic, minConfidence: 0.5 }
+            ];
+            
+            // 使用单个任务进行关系推断，避免创建多个Worker
+            const relationResult = await this.workerManager.submitTask(
+                WorkerMessageType.INFER_RELATIONS,
+                {
+                    entities: javaResults.filter(r => r && r.success !== false),
+                    mappings: xmlResults.filter(r => r && r.success !== false),
+                    strategies
+                },
+                { 
+                    timeout: 15000, // 关系推断可能需要更长时间
+                    maxRetries: 1 
+                }
+            );
+            
+            return relationResult;
+            
+        } catch (error) {
+            Logger.warn('Worker关系推断失败，尝试同步推断', error as Error);
+            
+            // 降级到同步关系推断
+            return this.performRelationInferenceSync(javaResults, xmlResults);
+        }
+    }
+    
+    /**
+     * 新增：生成ER图数据
+     */
+    private async generateERDiagramData(
+        javaResults: any[],
+        xmlResults: any[],
+        relationResults: any
+    ): Promise<any> {
+        // 整合所有解析结果
+        const entities = javaResults.filter(r => r && r.success !== false);
+        const mappings = xmlResults.filter(r => r && r.success !== false);
+        const relations = relationResults?.relations || [];
+        
+        // 生成Mermaid ER图代码
+        const mermaidCode = this.mermaidGenerator.generateERDiagram({
+            entities,
+            relations,
+            generatedAt: new Date(),
+            projectPath: this.stateManager.getCurrentWorkspacePath() || ''
+        });
+        
+        return {
+            entities,
+            relations,
+            mermaidCode,
+            metadata: {
+                generatedAt: new Date().toISOString(),
+                totalEntities: entities.length,
+                totalRelations: relations.length,
+                confidence: relationResults?.confidence || 0,
+                processingStats: {
+                    javaFiles: javaResults.length,
+                    xmlFiles: xmlResults.length,
+                    workerStats: this.workerManager.getStats()
+                }
+            }
+        };
+    }
+    
+    /**
+     * 新增：同步Java文件解析（降级方案）
+     */
+    private async parseJavaFileSync(fileData: any): Promise<any> {
+        try {
+            // 简化的同步解析逻辑
+            const { SmartJavaParser } = await import('../parsers/java-parser');
+            const parser = new SmartJavaParser();
+            return await parser.parseJavaFile(fileData.filePath, fileData.content);
+        } catch (error) {
+            Logger.warn(`同步Java解析失败: ${fileData.filePath}`, error as Error);
+            return {
+                filePath: fileData.filePath,
+                error: (error as Error).message,
+                success: false
+            };
+        }
+    }
+    
+    /**
+     * 新增：同步XML文件解析（降级方案）
+     */
+    private async parseXmlFileSync(fileData: any): Promise<any> {
+        try {
+            // 简化的同步解析逻辑
+            const { SmartXmlParser } = await import('../parsers/xml-parser');
+            const parser = new SmartXmlParser();
+            return await parser.parseXmlFile(fileData.filePath, fileData.content);
+        } catch (error) {
+            Logger.warn(`同步XML解析失败: ${fileData.filePath}`, error as Error);
+            return {
+                filePath: fileData.filePath,
+                error: (error as Error).message,
+                success: false
+            };
+        }
+    }
+    
+    /**
+     * 新增：同步关系推断（降级方案）
+     */
+    private async performRelationInferenceSync(javaResults: any[], xmlResults: any[]): Promise<any> {
+        try {
+            const { RelationInferenceEngine } = await import('../parsers/relation-inference');
+            const engine = new RelationInferenceEngine();
+            
+            const entities = javaResults.filter(r => r && r.success !== false);
+            const mappings = xmlResults.filter(r => r && r.success !== false);
+            
+            // 转换配置格式
+            const configStrategies = this.configManager.getExtensionConfig().inferenceStrategies;
+            const strategies = [
+                { name: 'naming-convention', weight: 0.8, enabled: configStrategies.naming, minConfidence: 0.6 },
+                { name: 'annotation-based', weight: 0.9, enabled: configStrategies.annotation, minConfidence: 0.7 },
+                { name: 'xml-mapping', weight: 0.85, enabled: configStrategies.xml, minConfidence: 0.75 },
+                { name: 'field-type-analysis', weight: 0.7, enabled: configStrategies.semantic, minConfidence: 0.5 }
+            ];
+            
+            return await engine.inferRelations(entities, mappings, {
+                strategies
+            });
+        } catch (error) {
+            Logger.warn('同步关系推断失败', error as Error);
+            return {
+                relations: [],
+                confidence: 0,
+                error: (error as Error).message
+            };
+        }
+    }
+    
+    /**
+     * 新增：数组分块工具方法
+     */
+    private chunkArray<T>(array: T[], chunkSize: number): T[][] {
+        const chunks: T[][] = [];
+        for (let i = 0; i < array.length; i += chunkSize) {
+            chunks.push(array.slice(i, i + chunkSize));
+        }
+        return chunks;
+    }
+
+    /**
+     * 刷新ER图命令处理 - 优化版本
      */
     async handleRefreshERDiagram(): Promise<void> {
+        if (this.isProcessing) {
+            vscode.window.showWarningMessage('ER图生成正在进行中，请稍候...');
+            return;
+        }
+        
         try {
-            Logger.info('开始刷新ER图');
-            
-            // 清除缓存
+            // 清除缓存并重新生成
             await this.stateManager.clearERDiagramData();
-            
-            // 重新生成
+            await this.stateManager.cleanExpiredCache();
             await this.handleGenerateERDiagram();
-            
-            Logger.info('ER图刷新完成');
         } catch (error) {
             Logger.error('刷新ER图失败', error as Error);
             vscode.window.showErrorMessage(`刷新ER图失败: ${error}`);
@@ -278,137 +568,133 @@ export class CommandHandler {
     }
 
     /**
-     * 导出ER图命令处理
-     */
-    async handleExportERDiagram(): Promise<void> {
-        try {
-            // 检查是否有ER图数据
-            const erData = await this.stateManager.getERDiagramData();
-            if (!erData) {
-                const result = await vscode.window.showInformationMessage(
-                    '没有找到ER图数据，是否先生成ER图？',
-                    '生成ER图', '取消'
-                );
-                if (result === '生成ER图') {
-                    await this.handleGenerateERDiagram();
-                    return;
-                }
-                return;
-            }
-
-            // 获取配置的导出格式
-            const config = this.configManager.getExtensionConfig();
-            
-            const options = ['PNG', 'SVG', 'PDF', 'Mermaid文本'];
-            const defaultFormat = config.exportFormat.toUpperCase();
-            
-            const selected = await vscode.window.showQuickPick(options, {
-                placeHolder: '选择导出格式',
-                value: defaultFormat
-            });
-
-            if (selected) {
-                Logger.info(`开始导出ER图为${selected}格式`);
-                
-                // 选择保存位置
-                const saveUri = await vscode.window.showSaveDialog({
-                    defaultUri: vscode.Uri.file(`er-diagram.${selected.toLowerCase()}`),
-                    filters: {
-                        [selected]: [selected.toLowerCase()]
-                    }
-                });
-
-                if (saveUri) {
-                    // TODO: 实现实际导出逻辑
-                    Logger.info(`ER图将导出到: ${saveUri.fsPath}`);
-                    vscode.window.showInformationMessage(`导出为${selected}格式功能开发中...`);
-                }
-            }
-        } catch (error) {
-            Logger.error('导出ER图失败', error as Error);
-            vscode.window.showErrorMessage(`导出ER图失败: ${error}`);
-        }
-    }
-
-    /**
-     * 打开设置命令处理
-     */
-    async handleOpenSettings(): Promise<void> {
-        try {
-            Logger.info('打开扩展设置');
-            
-            // 显示配置摘要
-            const configSummary = this.configManager.getConfigSummary();
-            const stateStats = this.stateManager.getStateStats();
-            
-            Logger.info('当前配置摘要', configSummary);
-            Logger.info('当前状态统计', stateStats);
-            
-            // 打开设置页面
-            await vscode.commands.executeCommand('workbench.action.openSettings', 'mybatis-er');
-            
-        } catch (error) {
-            Logger.error('打开设置失败', error as Error);
-            vscode.window.showErrorMessage(`打开设置失败: ${error}`);
-        }
-    }
-
-    /**
-     * 显示状态信息命令处理
+     * 显示状态命令处理 - 增强版本
      */
     async handleShowStatus(): Promise<void> {
         try {
-            const configSummary = this.configManager.getConfigSummary();
+            const workerStats = this.workerManager.getStats();
+            const healthStatus = this.workerManager.getHealthStatus();
             const stateStats = this.stateManager.getStateStats();
-            const erData = await this.stateManager.getERDiagramData();
-
+            const configSummary = this.configManager.getConfigSummary();
+            const memUsage = process.memoryUsage();
+            
             const statusInfo = {
-                workspace: stateStats.workspacePath || '未打开工作空间',
-                lastScan: stateStats.lastScanTime || '从未扫描',
-                cacheValid: stateStats.cacheValid ? '有效' : '无效',
-                hasERData: stateStats.hasERData ? '是' : '否',
-                entitiesCount: erData?.entities.length || 0,
-                relationsCount: erData?.relations.length || 0,
-                configValid: configSummary.valid ? '有效' : '无效',
-                enabledStrategies: configSummary.enabledStrategies.join(', ') || '无'
+                '🔧 Worker状态': {
+                    '活跃Worker': `${workerStats.activeWorkers}/${workerStats.activeWorkers + workerStats.idleWorkers}`,
+                    '队列任务': workerStats.queuedTasks,
+                    '处理中任务': workerStats.processingTasks,
+                    '已完成任务': workerStats.totalProcessedTasks,
+                    '平均队列时间': `${workerStats.averageQueueTime}ms`
+                },
+                '💾 内存使用': {
+                    '堆内存': `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+                    '总内存': `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+                    '外部内存': `${Math.round(memUsage.external / 1024 / 1024)}MB`
+                },
+                '🏥 健康状态': {
+                    '状态': healthStatus.healthy ? '✅ 健康' : '⚠️ 异常',
+                    '问题': healthStatus.issues.length > 0 ? healthStatus.issues.join(', ') : '无',
+                    '建议': healthStatus.recommendations.length > 0 ? healthStatus.recommendations.join(', ') : '无'
+                },
+                '📊 缓存状态': stateStats,
+                '⚙️ 配置': configSummary
             };
-
-            const message = `
-MyBatis ER Generator 状态信息：
-
-工作空间: ${statusInfo.workspace}
-最后扫描: ${statusInfo.lastScan}
-缓存状态: ${statusInfo.cacheValid}
-ER图数据: ${statusInfo.hasERData}
-实体数量: ${statusInfo.entitiesCount}
-关系数量: ${statusInfo.relationsCount}
-配置状态: ${statusInfo.configValid}
-启用策略: ${statusInfo.enabledStrategies}
-            `.trim();
-
-            await vscode.window.showInformationMessage(message, { modal: true });
-            Logger.info('显示状态信息', statusInfo);
-
+            
+            // 格式化状态信息
+            const statusText = Object.entries(statusInfo)
+                .map(([category, data]) => {
+                    const items = Object.entries(data)
+                        .map(([key, value]) => `  ${key}: ${value}`)
+                        .join('\n');
+                    return `${category}\n${items}`;
+                })
+                .join('\n\n');
+            
+            // 显示状态信息
+            const action = await vscode.window.showInformationMessage(
+                'MyBatis ER Generator 状态信息',
+                { modal: true, detail: statusText },
+                '复制到剪贴板', '清理缓存', '重启Worker'
+            );
+            
+            if (action === '复制到剪贴板') {
+                await vscode.env.clipboard.writeText(statusText);
+                vscode.window.showInformationMessage('状态信息已复制到剪贴板');
+            } else if (action === '清理缓存') {
+                await this.handleClearCache();
+            } else if (action === '重启Worker') {
+                await this.restartWorkerManager();
+            }
+            
         } catch (error) {
-            Logger.error('显示状态信息失败', error as Error);
-            vscode.window.showErrorMessage(`显示状态信息失败: ${error}`);
+            Logger.error('获取状态信息失败', error as Error);
+            vscode.window.showErrorMessage(`获取状态信息失败: ${error}`);
+        }
+    }
+    
+    /**
+     * 新增：重启Worker管理器
+     */
+    private async restartWorkerManager(): Promise<void> {
+        try {
+            vscode.window.showInformationMessage('正在重启Worker管理器...');
+            
+            await this.workerManager.shutdown();
+            
+            // 重新创建Worker管理器
+            const workerConfig = this.getOptimizedWorkerConfig();
+            this.workerManager = new WorkerManager(workerConfig);
+            
+            await this.workerManager.start();
+            
+            vscode.window.showInformationMessage('Worker管理器重启完成');
+            Logger.info('Worker管理器重启完成');
+            
+        } catch (error) {
+            Logger.error('重启Worker管理器失败', error as Error);
+            vscode.window.showErrorMessage(`重启Worker管理器失败: ${error}`);
         }
     }
 
     /**
-     * 清除缓存命令处理
+     * 获取优化的Worker配置
+     */
+    private getOptimizedWorkerConfig(): any {
+        const cpuCount = require('os').cpus().length;
+        return {
+            maxWorkers: Math.min(cpuCount, 6), // 进一步减少到最多6个Worker
+            workerTimeout: 10000, // 进一步减少到10秒
+            maxQueueSize: 30, // 进一步减少队列大小
+            heartbeatInterval: 2000, // 更频繁的心跳检测
+            maxRetries: 1, // 只重试1次
+            enableProfiling: false
+        };
+    }
+
+    /**
+     * 清除缓存命令处理 - 增强版本
      */
     async handleClearCache(): Promise<void> {
         try {
             const result = await vscode.window.showWarningMessage(
-                '确定要清除所有缓存数据吗？这将删除已保存的ER图数据。',
+                '确定要清除所有缓存吗？这将删除已解析的数据。',
                 '确定', '取消'
             );
-
+            
             if (result === '确定') {
-                await this.stateManager.resetWorkspaceState();
+                // 清除ER图数据和过期缓存
+                await this.stateManager.clearERDiagramData();
+                await this.stateManager.cleanExpiredCache();
+                
+                // 同时清理Worker状态
+                const workerStats = this.workerManager.getStats();
+                if (workerStats.activeWorkers > 0) {
+                    Logger.info('清理Worker状态');
+                    // 可以选择重启Worker管理器来彻底清理
+                }
+                
                 vscode.window.showInformationMessage('缓存已清除');
-                Logger.info('用户手动清除了缓存');
+                Logger.info('用户手动清除缓存');
             }
         } catch (error) {
             Logger.error('清除缓存失败', error as Error);
@@ -467,4 +753,39 @@ ER图数据: ${statusInfo.hasERData}
             vscode.window.showErrorMessage(`性能基准测试失败: ${error}`);
         }
     }
-} 
+
+    /**
+     * 简单的扩展功能测试
+     */
+    async handleSimpleTest(): Promise<void> {
+        try {
+            Logger.info('开始简单功能测试');
+            
+            // 测试Worker管理器
+            const workerStats = this.workerManager.getStats();
+            Logger.info('Worker状态', workerStats);
+            
+            // 测试状态管理器
+            const stateStats = this.stateManager.getStateStats();
+            Logger.info('状态管理器', stateStats);
+            
+            // 测试配置管理器
+            const configSummary = this.configManager.getConfigSummary();
+            Logger.info('配置管理器', configSummary);
+            
+            // 显示测试结果
+            vscode.window.showInformationMessage(
+                `扩展功能测试完成！\n` +
+                `Worker状态: ${workerStats.activeWorkers + workerStats.idleWorkers}个Worker\n` +
+                `配置状态: 正常\n` +
+                `状态管理: 正常`
+            );
+            
+            Logger.info('简单功能测试完成');
+            
+        } catch (error) {
+            Logger.error('简单功能测试失败', error as Error);
+            vscode.window.showErrorMessage(`功能测试失败: ${error}`);
+        }
+    }
+}

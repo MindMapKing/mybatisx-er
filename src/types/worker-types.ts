@@ -51,6 +51,12 @@ export interface WorkerResponse<T = any> {
     error?: string;
     /** 处理时间(毫秒) */
     processingTime: number;
+    /** Worker统计信息 */
+    workerStats?: {
+        processedTasks: number;
+        uptime: number;
+        memoryUsage: NodeJS.MemoryUsage;
+    };
     /** 额外元数据 */
     metadata?: Record<string, any>;
 }
@@ -165,15 +171,17 @@ export interface BatchParseTaskData {
 export interface InferenceTaskData {
     /** 实体列表 */
     entities: any[];
+    /** XML映射数据 */
+    mappings?: any[];
     /** 推断策略配置 */
-    strategies: {
+    strategies?: {
         naming: boolean;
         xml: boolean;
         annotation: boolean;
         semantic: boolean;
     };
     /** 最小置信度 */
-    minConfidence: number;
+    minConfidence?: number;
 }
 
 // 图表生成任务数据接口

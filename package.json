@@ -73,6 +73,12 @@
         "title": "运行性能基准测试",
         "category": "MyBatis ER",
         "icon": "$(dashboard)"
+      },
+      {
+        "command": "mybatis-er.simpleTest",
+        "title": "简单功能测试",
+        "category": "MyBatis ER",
+        "icon": "$(check)"
       }
     ],
     "views": {
@@ -121,6 +127,10 @@
         },
         {
           "command": "mybatis-er.performanceBenchmark",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.simpleTest",
           "when": "workspaceFolderCount > 0"
         }
       ],
@@ -176,16 +186,16 @@
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
+    "@types/node": "^22.15.0",
     "@types/vscode": "^1.74.0",
-    "esbuild-loader": "^4.0.2",
-    "typescript": "^5.3.0",
-    "webpack": "^5.89.0",
-    "webpack-cli": "^5.1.4"
+    "esbuild-loader": "^4.3.0",
+    "typescript": "^5.8.0",
+    "webpack": "^5.99.0",
+    "webpack-cli": "^6.0.0"
   },
   "dependencies": {
-    "fast-xml-parser": "^4.3.2",
-    "mermaid": "^10.6.1"
+    "fast-xml-parser": "^5.2.0",
+    "mermaid": "^11.6.0"
   },
   "repository": {
     "type": "git",

@@ -1,2 +1,4019 @@
-(()=>{"use strict";var e={857:e=>{e.exports=require("os")}},t={};function a(s){var i=t[s];if(void 0!==i)return i.exports;var r=t[s]={exports:{}};return e[s](r,r.exports,a),r.exports}a.d=(e,t)=>{for(var s in t)a.o(t,s)&&!a.o(e,s)&&Object.defineProperty(e,s,{enumerable:!0,get:t[s]})},a.o=(e,t)=>Object.prototype.hasOwnProperty.call(e,t),a.r=e=>{"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})};var s={};a.r(s),a.d(s,{activate:()=>M,deactivate:()=>N});const i=require("vscode");class r{static initialize(){this.outputChannel=i.window.createOutputChannel("MyBatis ER Generator")}static info(e,...t){const a=`[${(new Date).toISOString()}] INFO: ${e}`;console.log(a,...t),this.outputChannel?.appendLine(a)}static warn(e,...t){const a=`[${(new Date).toISOString()}] WARN: ${e}`;console.warn(a,...t),this.outputChannel?.appendLine(a)}static error(e,t,...a){const s=`[${(new Date).toISOString()}] ERROR: ${e}`,i=t?`\n${t.stack}`:"";console.error(s,t,...a),this.outputChannel?.appendLine(s+i)}static debug(e,...t){const a=`[${(new Date).toISOString()}] DEBUG: ${e}`;console.debug(a,...t),this.outputChannel?.appendLine(a)}static show(){this.outputChannel?.show()}static clear(){this.outputChannel?.clear()}static dispose(){this.outputChannel?.dispose()}}const n=class e{constructor(e){this.context=e,this.workspaceState=e.workspaceState,this.globalState=e.globalState,r.info("状态管理器已初始化")}static initialize(t){return e.instance||(e.instance=new e(t)),e.instance}static getInstance(){if(!e.instance)throw new Error("StateManager未初始化，请先调用initialize()");return e.instance}async saveERDiagramData(t){try{await this.workspaceState.update(e.KEYS.ER_DIAGRAM_DATA,{...t,generatedAt:t.generatedAt.toISOString()}),await this.workspaceState.update(e.KEYS.LAST_SCAN_TIME,Date.now()),r.info(`ER图数据已保存，包含${t.entities.length}个实体，${t.relations.length}个关系`)}catch(e){throw r.error("保存ER图数据失败",e),e}}async getERDiagramData(){try{const t=this.workspaceState.get(e.KEYS.ER_DIAGRAM_DATA);if(!t)return;return{...t,generatedAt:new Date(t.generatedAt)}}catch(e){return void r.error("获取ER图数据失败",e)}}async clearERDiagramData(){try{await this.workspaceState.update(e.KEYS.ER_DIAGRAM_DATA,void 0),await this.workspaceState.update(e.KEYS.LAST_SCAN_TIME,void 0),r.info("ER图数据已清除")}catch(e){throw r.error("清除ER图数据失败",e),e}}async saveProjectConfig(t){try{const a={...await this.getProjectConfig(),...t};await this.workspaceState.update(e.KEYS.PROJECT_CONFIG,a),r.info("项目配置已保存",a)}catch(e){throw r.error("保存项目配置失败",e),e}}async getProjectConfig(){try{return{autoRefresh:!0,inferenceStrategies:{naming:!0,xml:!0,annotation:!0,semantic:!0},theme:"auto",exportFormat:"png",...this.workspaceState.get(e.KEYS.PROJECT_CONFIG)}}catch(e){return r.error("获取项目配置失败",e),{autoRefresh:!0,inferenceStrategies:{naming:!0,xml:!0,annotation:!0,semantic:!0},theme:"auto",exportFormat:"png"}}}getLastScanTime(){return this.workspaceState.get(e.KEYS.LAST_SCAN_TIME)}isCacheValid(e=3e5){const t=this.getLastScanTime();return!!t&&Date.now()-t<e}async saveEntityCache(t,a){try{const s=this.workspaceState.get(e.KEYS.WORKSPACE_ENTITIES)||{};s[t]={data:a,timestamp:Date.now()},await this.workspaceState.update(e.KEYS.WORKSPACE_ENTITIES,s)}catch(e){r.error("保存实体缓存失败",e)}}getEntityCache(t){try{const a=(this.workspaceState.get(e.KEYS.WORKSPACE_ENTITIES)||{})[t];if(!a)return;if(Date.now()-a.timestamp>3e5)return;return a.data}catch(e){return void r.error("获取实体缓存失败",e)}}async cleanExpiredCache(){try{const t=this.workspaceState.get(e.KEYS.WORKSPACE_ENTITIES)||{},a=Date.now(),s=3e5,i={};let n=0;for(const[e,r]of Object.entries(t))a-r.timestamp<=s?i[e]=r:n++;n>0&&(await this.workspaceState.update(e.KEYS.WORKSPACE_ENTITIES,i),r.info(`清除了${n}个过期缓存项`))}catch(e){r.error("清除过期缓存失败",e)}}getCurrentWorkspacePath(){const e=i.workspace.workspaceFolders;return e?.[0]?.uri.fsPath}async isMyBatisProject(){if(!this.getCurrentWorkspacePath())return!1;try{const e=await i.workspace.findFiles("**/{*.xml,pom.xml,build.gradle,application.yml,application.properties}","**/node_modules/**",10);for(const t of e){const e=await i.workspace.fs.readFile(t),a=Buffer.from(e).toString("utf8");if(a.includes("mybatis")||a.includes("MyBatis")||a.includes("mybatis-plus")||a.includes("com.baomidou"))return!0}return!1}catch(e){return r.error("检查MyBatis项目失败",e),!1}}async saveGlobalSetting(e,t){try{await this.globalState.update(e,t),r.debug(`全局设置已保存: ${e}`)}catch(e){throw r.error("保存全局设置失败",e),e}}getGlobalSetting(e,t){return this.globalState.get(e,t)}async resetWorkspaceState(){try{const t=Object.values(e.KEYS);for(const e of t)await this.workspaceState.update(e,void 0);r.info("工作空间状态已重置")}catch(e){throw r.error("重置工作空间状态失败",e),e}}getStateStats(){const t=this.getLastScanTime();return{workspacePath:this.getCurrentWorkspacePath(),lastScanTime:t?new Date(t).toISOString():null,cacheValid:this.isCacheValid(),hasERData:!!this.workspaceState.get(e.KEYS.ER_DIAGRAM_DATA)}}};n.KEYS={ER_DIAGRAM_DATA:"erDiagramData",LAST_SCAN_TIME:"lastScanTime",PROJECT_CONFIG:"projectConfig",CACHE_VERSION:"cacheVersion",WORKSPACE_ENTITIES:"workspaceEntities",INFERENCE_CACHE:"inferenceCache"};let o=n;class c{constructor(){this.configChangeListeners=[],i.workspace.onDidChangeConfiguration(this.onConfigurationChanged.bind(this)),r.info("配置管理器已初始化")}static getInstance(){return c.instance||(c.instance=new c),c.instance}getExtensionConfig(){const e=i.workspace.getConfiguration("mybatis-er");return{autoRefresh:e.get("autoRefresh",!0),inferenceStrategies:e.get("inferenceStrategies",{naming:!0,xml:!0,annotation:!0,semantic:!0}),theme:e.get("theme","auto"),exportFormat:e.get("exportFormat","png")}}async updateExtensionConfig(e,t,a){try{const s=i.workspace.getConfiguration("mybatis-er");await s.update(e,t,a||i.ConfigurationTarget.Workspace),r.info(`配置已更新: ${e} = ${JSON.stringify(t)}`)}catch(t){throw r.error(`更新配置失败: ${e}`,t),t}}getWorkspaceConfig(){return{javaHome:this.getJavaConfig("home"),javaSourcePaths:this.getJavaConfig("sourcePaths",[]),includePatterns:this.getFileConfig("include",["**/*.java","**/*.xml"]),excludePatterns:this.getFileConfig("exclude",["**/node_modules/**","**/target/**","**/build/**","**/.git/**"]),tabSize:this.getEditorConfig("tabSize",4),insertSpaces:this.getEditorConfig("insertSpaces",!0),searchMaxResults:this.getSearchConfig("maxResults",1e3),searchTimeout:this.getSearchConfig("timeout",1e4)}}getJavaConfig(e,t){return i.workspace.getConfiguration("java").get(e,t)}getFileConfig(e,t){return i.workspace.getConfiguration("files").get(e,t)}getEditorConfig(e,t){return i.workspace.getConfiguration("editor").get(e,t)}getSearchConfig(e,t){return i.workspace.getConfiguration("search").get(e,t)}getMyBatisConfig(){const e=i.workspace.getConfiguration("mybatis-er");return{parseTimeout:e.get("parseTimeout",3e4),maxFileSize:e.get("maxFileSize",10485760),inferenceTimeout:e.get("inferenceTimeout",1e4),minConfidence:e.get("minConfidence",.6),cacheEnabled:e.get("cacheEnabled",!0),cacheMaxAge:e.get("cacheMaxAge",3e5),maxEntitiesInView:e.get("maxEntitiesInView",500),animationEnabled:e.get("animationEnabled",!0),exportPath:e.get("exportPath",""),exportQuality:e.get("exportQuality",1)}}getPerformanceConfig(){const e=i.workspace.getConfiguration("mybatis-er");return{maxWorkers:e.get("maxWorkers",Math.max(2,Math.floor(a(857).cpus().length/2))),workerTimeout:e.get("workerTimeout",3e4),maxMemoryUsage:e.get("maxMemoryUsage",104857600),gcThreshold:e.get("gcThreshold",.8),maxConcurrentParsing:e.get("maxConcurrentParsing",4),batchSize:e.get("batchSize",50),enableProfiling:e.get("enableProfiling",!1),logLevel:e.get("logLevel","info")}}validateConfig(){const e=[],t=this.getExtensionConfig(),a=this.getMyBatisConfig(),s=this.getPerformanceConfig();"boolean"!=typeof t.autoRefresh&&e.push("autoRefresh必须是布尔值"),["auto","light","dark"].includes(t.theme)||e.push("theme必须是auto、light或dark之一"),["png","svg","pdf","mermaid"].includes(t.exportFormat)||e.push("exportFormat必须是png、svg、pdf或mermaid之一");const i=t.inferenceStrategies;if("object"!=typeof i||null===i)e.push("inferenceStrategies必须是对象");else{const t=["naming","xml","annotation","semantic"];for(const a of t)"boolean"!=typeof i[a]&&e.push(`inferenceStrategies.${a}必须是布尔值`)}return(s.maxWorkers<1||s.maxWorkers>16)&&e.push("maxWorkers必须在1-16之间"),(a.minConfidence<0||a.minConfidence>1)&&e.push("minConfidence必须在0-1之间"),{valid:0===e.length,errors:e}}async resetToDefaults(){try{const e=i.workspace.getConfiguration("mybatis-er"),t=["autoRefresh","inferenceStrategies","theme","exportFormat","parseTimeout","maxFileSize","inferenceTimeout","minConfidence","cacheEnabled","cacheMaxAge","maxEntitiesInView","animationEnabled"];for(const a of t)await e.update(a,void 0,i.ConfigurationTarget.Workspace);r.info("配置已重置为默认值")}catch(e){throw r.error("重置配置失败",e),e}}exportConfig(){return{extension:this.getExtensionConfig(),workspace:this.getWorkspaceConfig(),mybatis:this.getMyBatisConfig(),performance:this.getPerformanceConfig(),timestamp:(new Date).toISOString()}}async importConfig(e){try{if(!e.extension)throw new Error("无效的配置数据");const t=e.extension,a=i.workspace.getConfiguration("mybatis-er");for(const[e,s]of Object.entries(t))await a.update(e,s,i.ConfigurationTarget.Workspace);r.info("配置导入成功")}catch(e){throw r.error("导入配置失败",e),e}}onConfigChanged(e){return this.configChangeListeners.push(e),new i.Disposable((()=>{const t=this.configChangeListeners.indexOf(e);t>=0&&this.configChangeListeners.splice(t,1)}))}onConfigurationChanged(e){if(e.affectsConfiguration("mybatis-er")){const e=this.getExtensionConfig();r.info("配置已变更",e),this.configChangeListeners.forEach((t=>{try{t(e)}catch(e){r.error("配置变更监听器执行失败",e)}}))}}getConfigSummary(){const e=this.validateConfig(),t=this.getExtensionConfig(),a=this.getPerformanceConfig();return{valid:e.valid,errors:e.errors,autoRefresh:t.autoRefresh,enabledStrategies:Object.entries(t.inferenceStrategies).filter((([e,t])=>t)).map((([e,t])=>e)),theme:t.theme,maxWorkers:a.maxWorkers,cacheEnabled:this.getMyBatisConfig().cacheEnabled}}}const l=require("worker_threads"),m=require("path"),h=require("events");var d=(e=>(e.PARSE_JAVA_FILE="PARSE_JAVA_FILE",e.PARSE_XML_FILE="PARSE_XML_FILE",e.PARSE_BATCH_FILES="PARSE_BATCH_FILES",e.INFER_RELATIONS="INFER_RELATIONS",e.VALIDATE_RELATIONS="VALIDATE_RELATIONS",e.GENERATE_DIAGRAM="GENERATE_DIAGRAM",e.EXPORT_DIAGRAM="EXPORT_DIAGRAM",e.PING="PING",e.PONG="PONG",e.TERMINATE="TERMINATE",e.ERROR="ERROR",e.PROGRESS="PROGRESS",e))(d||{}),u=(e=>(e.IDLE="idle",e.BUSY="busy",e.ERROR="error",e.TERMINATED="terminated",e))(u||{});class g extends h.EventEmitter{constructor(e={}){super(),this.workers=new Map,this.workerInfos=new Map,this.taskQueue=[],this.activeTasks=new Map,this.pendingResponses=new Map,this.isShuttingDown=!1,this.config={maxWorkers:Math.max(2,Math.min(8,a(857).cpus().length-1)),workerTimeout:3e4,maxQueueSize:1e3,heartbeatInterval:5e3,maxRetries:3,enableProfiling:!1,...e},this.stats={activeWorkers:0,idleWorkers:0,queuedTasks:0,processingTasks:0,totalProcessedTasks:0,averageQueueTime:0,systemLoad:0},this.startHeartbeat(),r.info(`WorkerManager initialized with ${this.config.maxWorkers} max workers`)}async start(){if(this.isShuttingDown)throw new Error("WorkerManager is shutting down");const e=Math.min(2,this.config.maxWorkers);for(let t=0;t<e;t++)await this.createWorker();r.info(`WorkerManager started with ${e} workers`)}async shutdown(){this.isShuttingDown=!0,this.heartbeatInterval&&clearInterval(this.heartbeatInterval),this.taskQueue=[];for(const[e,t]of this.pendingResponses)clearTimeout(t.timeout),t.reject(new Error("WorkerManager is shutting down"));this.pendingResponses.clear();const e=Array.from(this.workers.values()).map((e=>this.terminateWorker(e)));await Promise.all(e),this.workers.clear(),this.workerInfos.clear(),this.activeTasks.clear(),r.info("WorkerManager shutdown completed")}async submitTask(e,t,a={}){if(this.isShuttingDown)throw new Error("WorkerManager is shutting down");if(this.taskQueue.length>=this.config.maxQueueSize)throw new Error("Task queue is full");const s={id:this.generateTaskId(),type:e,data:t,priority:a.priority||5,timeout:a.timeout||this.config.workerTimeout,retryCount:0,maxRetries:a.maxRetries||this.config.maxRetries,createdAt:Date.now()};return new Promise(((e,t)=>{this.addTaskToQueue(s);const a=setTimeout((()=>{this.pendingResponses.delete(s.id),t(new Error(`Task ${s.id} timed out`))}),s.timeout);this.pendingResponses.set(s.id,{resolve:e,reject:t,timeout:a}),this.processQueue()}))}getStats(){return this.updateStats(),{...this.stats}}getWorkerInfos(){return Array.from(this.workerInfos.values())}async createWorker(){const e=this.generateWorkerId(),t=m.join(__dirname,"workers","worker-thread.js");try{const a=new l.Worker(t,{workerData:{workerId:e,config:this.config}});return this.setupWorkerListeners(a,e),this.workers.set(e,a),this.workerInfos.set(e,{id:e,status:u.IDLE,processedTasks:0,errorCount:0,createdAt:Date.now(),lastActiveAt:Date.now(),averageProcessingTime:0}),await this.sendMessage(e,{id:this.generateMessageId(),type:d.PING,payload:{},timestamp:Date.now()}),this.emit("workerCreated",{workerId:e}),r.debug(`Worker ${e} created`),e}catch(e){throw r.error(`Failed to create worker: ${e}`),e}}setupWorkerListeners(e,t){e.on("message",(e=>{this.handleWorkerMessage(t,e)})),e.on("error",(e=>{this.handleWorkerError(t,e)})),e.on("exit",(e=>{this.handleWorkerExit(t,e)}))}handleWorkerMessage(e,t){const a=this.workerInfos.get(e);if(a)switch(a.lastActiveAt=Date.now(),t.type){case d.PONG:break;case d.PROGRESS:this.emit("progress",t.payload);break;case d.ERROR:this.handleTaskError(e,t);break;default:t.isResponse&&t.responseToId&&this.handleTaskResponse(e,t)}}handleTaskResponse(e,t){const a=t.responseToId,s=this.pendingResponses.get(a),i=this.activeTasks.get(a),r=this.workerInfos.get(e);if(!s||!i||!r)return;clearTimeout(s.timeout),this.pendingResponses.delete(a),this.activeTasks.delete(a),r.status=u.IDLE,r.currentTaskId=void 0,r.processedTasks++;const n=Date.now()-(i.startedAt||i.createdAt);r.averageProcessingTime=(r.averageProcessingTime*(r.processedTasks-1)+n)/r.processedTasks,i.completedAt=Date.now(),this.stats.totalProcessedTasks++;const o=t.payload;o.success?(s.resolve(o.data),this.emit("taskCompleted",{taskId:a,workerId:e,result:o.data})):(s.reject(new Error(o.error||"Task failed")),this.emit("taskFailed",{taskId:a,workerId:e,error:o.error})),this.processQueue()}handleTaskError(e,t){const a=t.payload,s=this.workerInfos.get(e);if(s&&(s.errorCount++,s.status=u.ERROR),a.taskId){const e=this.pendingResponses.get(a.taskId),t=this.activeTasks.get(a.taskId);e&&t&&(t.retryCount<t.maxRetries?(t.retryCount++,this.addTaskToQueue(t),r.warn(`Retrying task ${t.id}, attempt ${t.retryCount}/${t.maxRetries}`)):(clearTimeout(e.timeout),this.pendingResponses.delete(a.taskId),this.activeTasks.delete(a.taskId),e.reject(new Error(a.message))))}r.error(`Worker ${e} error: ${a.message}`),this.emit("workerError",{workerId:e,error:a})}handleWorkerError(e,t){r.error(`Worker ${e} encountered error: ${t.message}`);const a=this.workerInfos.get(e);a&&(a.status=u.ERROR,a.errorCount++),this.recreateWorker(e)}handleWorkerExit(e,t){r.warn(`Worker ${e} exited with code ${t}`),this.workers.delete(e);const a=this.workerInfos.get(e);a&&(a.status=u.TERMINATED),this.isShuttingDown||this.recreateWorker(e)}async recreateWorker(e){try{this.workers.delete(e),this.workerInfos.delete(e),await this.createWorker(),r.info(`Worker ${e} recreated`)}catch(e){r.error(`Failed to recreate worker: ${e}`)}}addTaskToQueue(e){let t=this.taskQueue.length;for(let a=0;a<this.taskQueue.length;a++)if(this.taskQueue[a].priority<e.priority){t=a;break}this.taskQueue.splice(t,0,e),this.stats.queuedTasks=this.taskQueue.length}processQueue(){if(0===this.taskQueue.length)return;const e=this.findIdleWorker();if(!e)return void(this.workers.size<this.config.maxWorkers&&this.createWorker().then((()=>this.processQueue())));const t=this.taskQueue.shift();t&&(this.stats.queuedTasks=this.taskQueue.length,this.assignTaskToWorker(e,t))}findIdleWorker(){for(const[e,t]of this.workerInfos)if(t.status===u.IDLE)return e;return null}assignTaskToWorker(e,t){const a=this.workers.get(e),s=this.workerInfos.get(e);if(!a||!s)return;s.status=u.BUSY,s.currentTaskId=t.id,t.startedAt=Date.now(),this.activeTasks.set(t.id,t),this.stats.processingTasks=this.activeTasks.size;const i={id:this.generateMessageId(),type:t.type,payload:t.data,timestamp:Date.now()};this.sendMessage(e,i),this.emit("taskStarted",{taskId:t.id,workerId:e}),r.debug(`Task ${t.id} assigned to worker ${e}`)}async sendMessage(e,t){const a=this.workers.get(e);if(!a)throw new Error(`Worker ${e} not found`);a.postMessage(t)}async terminateWorker(e){return new Promise((t=>{const a=setTimeout((()=>{e.terminate(),t()}),5e3);e.once("exit",(()=>{clearTimeout(a),t()})),e.postMessage({id:this.generateMessageId(),type:d.TERMINATE,payload:{},timestamp:Date.now()})}))}startHeartbeat(){this.heartbeatInterval=setInterval((()=>{this.performHeartbeat()}),this.config.heartbeatInterval)}performHeartbeat(){const e=Date.now();for(const[t,a]of this.workerInfos){if(e-a.lastActiveAt>this.config.workerTimeout){r.warn(`Worker ${t} appears to be unresponsive`),this.recreateWorker(t);continue}const s=this.workers.get(t);s&&a.status===u.IDLE&&s.postMessage({id:this.generateMessageId(),type:d.PING,payload:{},timestamp:e})}}updateStats(){let e=0,t=0;for(const a of this.workerInfos.values())a.status===u.BUSY?e++:a.status===u.IDLE&&t++;this.stats.activeWorkers=e,this.stats.idleWorkers=t,this.stats.queuedTasks=this.taskQueue.length,this.stats.processingTasks=this.activeTasks.size,this.stats.systemLoad=e/Math.max(1,this.workers.size)*100}generateWorkerId(){return`worker_${Date.now()}_${Math.random().toString(36).substr(2,9)}`}generateTaskId(){return`task_${Date.now()}_${Math.random().toString(36).substr(2,9)}`}generateMessageId(){return`msg_${Date.now()}_${Math.random().toString(36).substr(2,9)}`}}const p=require("fs/promises");class f{constructor(e){this.workspaceRoot=e||this.getWorkspaceRoot(),this.defaultOptions={includePatterns:["**/*.java","**/*.xml"],excludePatterns:["**/node_modules/**","**/target/**","**/build/**","**/out/**","**/bin/**","**/.git/**","**/.vscode/**","**/.idea/**"],maxFileSize:10485760,recursive:!0,includeTests:!1,parseContent:!0,maxDepth:10}}async scanWorkspace(e){const t=Date.now(),a={...this.defaultOptions,...e};r.info("开始扫描工作空间文件...");try{const e={totalFiles:0,javaFileCount:0,xmlFileCount:0,entityCount:0,mapperCount:0,directoriesScanned:0,skippedFiles:0,errorFiles:0},s=[],i=[];await this.scanDirectory(this.workspaceRoot,a,s,i,e,0),a.parseContent&&await this.parseFileContents(s,i,e);const n=Date.now()-t;return r.info(`文件扫描完成: ${e.totalFiles}个文件, 耗时${n}ms`),{javaFiles:s,xmlFiles:i,stats:e,scanTime:n}}catch(e){throw r.error(`文件扫描失败: ${e}`),e}}async scanDirectory(e,t,a,s,i,n){if(!(n>t.maxDepth))try{const r=await p.readdir(e,{withFileTypes:!0});i.directoriesScanned++;for(const o of r){const r=m.join(e,o.name),c=m.relative(this.workspaceRoot,r);this.shouldExclude(c,t.excludePatterns)?i.skippedFiles++:o.isDirectory()?t.recursive&&await this.scanDirectory(r,t,a,s,i,n+1):o.isFile()&&await this.processFile(r,c,t,a,s,i)}}catch(t){r.warn(`扫描目录失败 ${e}: ${t}`),i.errorFiles++}}async processFile(e,t,a,s,i,n){try{const o=m.basename(e),c=m.extname(o).toLowerCase();if(".java"!==c&&".xml"!==c)return;if(!a.includeTests&&this.isTestFile(t))return void n.skippedFiles++;const l=await p.stat(e);if(l.size>a.maxFileSize)return r.warn(`文件过大，跳过: ${t} (${l.size} bytes)`),void n.skippedFiles++;const h={filePath:e,relativePath:t,fileName:o,size:l.size,lastModified:l.mtime.getTime(),fileType:".java"===c?"java":"xml"};".java"===c?(s.push(h),n.javaFileCount++):".xml"===c&&(i.push(h),n.xmlFileCount++),n.totalFiles++}catch(t){r.warn(`处理文件失败 ${e}: ${t}`),n.errorFiles++}}async parseFileContents(e,t,a){r.info("开始解析文件内容...");for(const t of e)try{await this.parseJavaFile(t),t.isEntity&&a.entityCount++}catch(e){r.warn(`解析Java文件失败 ${t.relativePath}: ${e}`),a.errorFiles++}for(const e of t)try{await this.parseXmlFile(e),e.isMapper&&a.mapperCount++}catch(t){r.warn(`解析XML文件失败 ${e.relativePath}: ${t}`),a.errorFiles++}}async parseJavaFile(e){try{const t=await p.readFile(e.filePath,"utf-8"),a=t.match(/package\s+([\w.]+)\s*;/);a&&(e.packageName=a[1]),e.isEntity=this.isEntityClass(t,e.fileName)}catch(e){throw new Error(`读取Java文件失败: ${e}`)}}async parseXmlFile(e){try{const t=await p.readFile(e.filePath,"utf-8"),a=t.match(/namespace\s*=\s*["']([^"']+)["']/);a&&(e.namespace=a[1]),e.isMapper=this.isMapperFile(t,e.fileName)}catch(e){throw new Error(`读取XML文件失败: ${e}`)}}isEntityClass(e,t){const a=["@Entity","@Table","@TableName","@Data","@Component"];for(const t of a)if(e.includes(t))return!0;const s=[/Entity\.java$/,/Model\.java$/,/DO\.java$/,/PO\.java$/,/VO\.java$/,/DTO\.java$/];for(const e of s)if(e.test(t))return!0;const i=e.match(/public\s+class\s+(\w+)/);if(i){i[1];const t=/public\s+\w+\s+get\w+\s*\(/.test(e),a=/public\s+void\s+set\w+\s*\(/.test(e);if(t&&a)return!0}return!1}isMapperFile(e,t){if(t.toLowerCase().includes("mapper"))return!0;const a=["<mapper","<select","<insert","<update","<delete","<resultMap"];for(const t of a)if(e.includes(t))return!0;return!1}isTestFile(e){return[/\/test\//,/\/tests\//,/Test\.java$/,/Tests\.java$/,/TestCase\.java$/,/_test\.java$/,/_tests\.java$/].some((t=>t.test(e)))}shouldExclude(e,t){return t.some((t=>new RegExp(t.replace(/\*\*/g,".*").replace(/\*/g,"[^/]*").replace(/\?/g,"[^/]")).test(e)))}getWorkspaceRoot(){const e=i.workspace.workspaceFolders;if(!e||0===e.length)throw new Error("没有打开的工作空间");return e[0].uri.fsPath}createFileWatcher(e){const t=i.workspace.createFileSystemWatcher(new i.RelativePattern(this.workspaceRoot,"**/*.{java,xml}")),a=[t.onDidCreate((t=>e("created",t.fsPath))),t.onDidChange((t=>e("changed",t.fsPath))),t.onDidDelete((t=>e("deleted",t.fsPath))),t];return i.Disposable.from(...a)}async getFileContent(e){try{return await p.readFile(e,"utf-8")}catch(t){throw new Error(`读取文件失败 ${e}: ${t}`)}}async fileExists(e){try{return await p.access(e),!0}catch{return!1}}async getFileStats(e){return await p.stat(e)}async getFileContents(e){const t=new Map,a=e.map((async e=>{try{const a=await this.getFileContent(e);t.set(e,a)}catch(t){r.warn(`读取文件失败 ${e}: ${t}`)}}));return await Promise.all(a),t}filterFiles(e,t){return e.filter((e=>!(t.fileType&&e.fileType!==t.fileType||void 0!==t.isEntity&&e.isEntity!==t.isEntity||void 0!==t.isMapper&&e.isMapper!==t.isMapper||t.packageName&&e.packageName!==t.packageName||t.namespace&&e.namespace!==t.namespace||t.minSize&&e.size<t.minSize||t.maxSize&&e.size>t.maxSize||t.modifiedAfter&&e.lastModified<t.modifiedAfter)))}}class w{generateERDiagram(e){const{entities:t,relations:a}=e;if(!t||0===t.length)return this.generateEmptyDiagram();let s="erDiagram\n";return s+=this.generateEntities(t),a&&a.length>0&&(s+="\n",s+=this.generateRelations(a)),s}generateEmptyDiagram(){return'erDiagram\n    NO_ENTITIES {\n        string message "未找到MyBatis实体类"\n        string suggestion "请确保项目包含@TableName等注解的实体类"\n    }'}generateEntities(e){return e.map((e=>this.generateEntity(e))).join("\n\n")}generateEntity(e){let t=`    ${this.sanitizeTableName(e.tableName)} {\n`;e.fields&&e.fields.length>0?t+=e.fields.map((e=>this.generateField(e))).join("\n"):t+='        string placeholder "暂无字段信息"\n',t+="    }";const a=this.generateEntityComment(e);return a&&(t+=` %% ${a}`),t}generateField(e){return`        ${this.mapJavaTypeToDBType(e.javaType)} ${this.sanitizeColumnName(e.columnName)}${this.generateFieldConstraints(e)}`}generateFieldConstraints(e){const t=[];return e.isPrimaryKey&&t.push("PK"),e.isNotNull&&t.push("NOT NULL"),e.isUnique&&t.push("UNIQUE"),e.defaultValue&&t.push(`DEFAULT "${e.defaultValue}"`),e.comment&&t.push(`"${e.comment}"`),t.length>0?` ${t.join(" ")}`:""}generateEntityComment(e){const t=[];e.className&&t.push(`Java类: ${e.className}`),e.comment&&t.push(e.comment);const a=e.annotations.find((e=>"TableName"===e.name||"Table"===e.name));return a&&t.push(`注解: @${a.name}`),t.join(", ")}generateRelations(e){return e.map((e=>this.generateRelation(e))).join("\n")}generateRelation(e){const t=this.sanitizeTableName(e.fromTable),a=this.sanitizeTableName(e.toTable);let s=`    ${t} ${this.getRelationshipSymbol(e.type)} ${a}`;(e.fromField||e.toField)&&(s+=` : ${this.generateRelationLabel(e)}`);const i=this.generateRelationComment(e);return i&&(s+=` %% ${i}`),s}getRelationshipSymbol(e){switch(e.toLowerCase()){case"one-to-one":default:return"||--||";case"one-to-many":return"||--o{";case"many-to-one":return"}o--||";case"many-to-many":return"}o--o{"}}generateRelationLabel(e){const t=[];return e.fromField&&t.push(e.fromField),e.toField&&e.toField!==e.fromField&&t.push(e.toField),t.join("-")}generateRelationComment(e){const t=[];return void 0!==e.confidence&&t.push(`置信度: ${(100*e.confidence).toFixed(1)}%`),e.source&&t.push(`来源: ${e.source}`),e.description&&t.push(e.description),t.join(", ")}mapJavaTypeToDBType(e){return{String:"varchar",Integer:"int",int:"int",Long:"bigint",long:"bigint",Double:"double",double:"double",Float:"float",float:"float",Boolean:"boolean",boolean:"boolean",Date:"datetime",LocalDate:"date",LocalDateTime:"datetime",LocalTime:"time",Timestamp:"timestamp",BigDecimal:"decimal","byte[]":"blob","Byte[]":"blob"}[e.split("<")[0]]||"varchar"}sanitizeTableName(e){return e?e.replace(/[^a-zA-Z0-9_]/g,"_").toUpperCase():"UNKNOWN_TABLE"}sanitizeColumnName(e){return e?e.replace(/[^a-zA-Z0-9_]/g,"_").toLowerCase():"unknown_column"}generateThemedDiagram(e,t="default"){const a=this.generateERDiagram(e);return`%%{init: ${this.getThemeConfig(t)}}%%\n${a}`}getThemeConfig(e){const t={default:'{"theme": "default"}',dark:'{"theme": "dark"}',forest:'{"theme": "forest"}',neutral:'{"theme": "neutral"}'};return t[e]||t.default}generateStatistics(e){const{entities:t,relations:a}=e,s={entityCount:t.length,relationCount:a.length,fieldCount:t.reduce(((e,t)=>e+t.fields.length),0),relationTypes:{}};return a.forEach((e=>{const t=e.type;s.relationTypes[t]=(s.relationTypes[t]||0)+1})),s}validateMermaidCode(e){const t=[],a=[];e.trim().startsWith("erDiagram")||t.push('Mermaid代码必须以"erDiagram"开头');const s=e.match(/\s+\w+\s*\{[^}]*\}/g);s&&0!==s.length||a.push("未找到实体定义");const i=e.match(/\s+\w+\s+\|\|--[o\|]\{?\s+\w+/g);return i&&0!==i.length||a.push("未找到关系定义"),{isValid:0===t.length,errors:t,warnings:a}}}const y={entities:[{className:"User",tableName:"user",comment:"用户表",filePath:"/src/main/java/com/example/entity/User.java",annotations:[{name:"TableName",attributes:{value:"user"}}],fields:[{fieldName:"id",columnName:"id",javaType:"Long",isPrimaryKey:!0,isNotNull:!0,isUnique:!0,comment:"用户ID"},{fieldName:"username",columnName:"username",javaType:"String",isPrimaryKey:!1,isNotNull:!0,isUnique:!0,comment:"用户名"},{fieldName:"email",columnName:"email",javaType:"String",isPrimaryKey:!1,isNotNull:!0,isUnique:!0,comment:"邮箱"},{fieldName:"createTime",columnName:"create_time",javaType:"LocalDateTime",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"创建时间"}]},{className:"Order",tableName:"order",comment:"订单表",filePath:"/src/main/java/com/example/entity/Order.java",annotations:[{name:"TableName",attributes:{value:"order"}}],fields:[{fieldName:"id",columnName:"id",javaType:"Long",isPrimaryKey:!0,isNotNull:!0,isUnique:!0,comment:"订单ID"},{fieldName:"userId",columnName:"user_id",javaType:"Long",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"用户ID"},{fieldName:"orderNo",columnName:"order_no",javaType:"String",isPrimaryKey:!1,isNotNull:!0,isUnique:!0,comment:"订单号"},{fieldName:"totalAmount",columnName:"total_amount",javaType:"BigDecimal",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"总金额"},{fieldName:"status",columnName:"status",javaType:"Integer",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"订单状态"},{fieldName:"createTime",columnName:"create_time",javaType:"LocalDateTime",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"创建时间"}]},{className:"OrderItem",tableName:"order_item",comment:"订单项表",filePath:"/src/main/java/com/example/entity/OrderItem.java",annotations:[{name:"TableName",attributes:{value:"order_item"}}],fields:[{fieldName:"id",columnName:"id",javaType:"Long",isPrimaryKey:!0,isNotNull:!0,isUnique:!0,comment:"订单项ID"},{fieldName:"orderId",columnName:"order_id",javaType:"Long",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"订单ID"},{fieldName:"productId",columnName:"product_id",javaType:"Long",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"产品ID"},{fieldName:"quantity",columnName:"quantity",javaType:"Integer",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"数量"},{fieldName:"price",columnName:"price",javaType:"BigDecimal",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"单价"}]},{className:"Product",tableName:"product",comment:"产品表",filePath:"/src/main/java/com/example/entity/Product.java",annotations:[{name:"TableName",attributes:{value:"product"}}],fields:[{fieldName:"id",columnName:"id",javaType:"Long",isPrimaryKey:!0,isNotNull:!0,isUnique:!0,comment:"产品ID"},{fieldName:"name",columnName:"name",javaType:"String",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"产品名称"},{fieldName:"description",columnName:"description",javaType:"String",isPrimaryKey:!1,isNotNull:!1,isUnique:!1,comment:"产品描述"},{fieldName:"price",columnName:"price",javaType:"BigDecimal",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"价格"},{fieldName:"stock",columnName:"stock",javaType:"Integer",isPrimaryKey:!1,isNotNull:!0,isUnique:!1,comment:"库存"}]}],relations:[{fromTable:"user",toTable:"order",fromField:"id",toField:"user_id",type:"one-to-many",confidence:.95,source:"naming-convention",description:"用户与订单的一对多关系"},{fromTable:"order",toTable:"order_item",fromField:"id",toField:"order_id",type:"one-to-many",confidence:.95,source:"naming-convention",description:"订单与订单项的一对多关系"},{fromTable:"product",toTable:"order_item",fromField:"id",toField:"product_id",type:"one-to-many",confidence:.95,source:"naming-convention",description:"产品与订单项的一对多关系"}]};class E{constructor(){this.testResults=new Map}static getInstance(){return E.instance||(E.instance=new E),E.instance}startTest(e){const t=new k(e);return r.info(`开始性能测试: ${e}`),t}recordResult(e){this.testResults.set(e.testName,e),r.info(`性能测试完成: ${e.testName}`,{duration:e.duration,memoryUsed:e.memoryUsed,itemsProcessed:e.itemsProcessed})}getTestReport(){const e=Array.from(this.testResults.values());return{totalTests:e.length,results:e,summary:{totalDuration:e.reduce(((e,t)=>e+t.duration),0),averageDuration:e.length>0?e.reduce(((e,t)=>e+t.duration),0)/e.length:0,maxMemoryUsed:Math.max(...e.map((e=>e.memoryUsed))),totalItemsProcessed:e.reduce(((e,t)=>e+t.itemsProcessed),0)}}}async showPerformanceReport(){const e=this.getTestReport(),t=`\n性能测试报告：\n\n总测试数: ${e.totalTests}\n总耗时: ${e.summary.totalDuration.toFixed(2)}ms\n平均耗时: ${e.summary.averageDuration.toFixed(2)}ms\n最大内存使用: ${(e.summary.maxMemoryUsed/1024/1024).toFixed(2)}MB\n总处理项目: ${e.summary.totalItemsProcessed}\n\n详细结果:\n${e.results.map((e=>`- ${e.testName}: ${e.duration.toFixed(2)}ms, ${(e.memoryUsed/1024/1024).toFixed(2)}MB, ${e.itemsProcessed}项`)).join("\n")}\n        `.trim();await i.window.showInformationMessage(t,{modal:!0})}clearResults(){this.testResults.clear(),r.info("性能测试结果已清除")}async runBenchmarkSuite(){r.info("开始运行基准测试套件"),this.clearResults();const e=this.startTest("内存使用基准");await this.simulateMemoryUsage(),e.finish(100);const t=this.startTest("解析速度基准");await this.simulateParsingLoad(),t.finish(500);const a=this.startTest("关系推断基准");await this.simulateInferenceLoad(),a.finish(200);const s=this.getTestReport();return r.info("基准测试套件完成",s.summary),s}async simulateMemoryUsage(){const e=[];for(let t=0;t<1e4;t++)e.push({id:t,name:`Entity_${t}`,fields:Array.from({length:10},((e,a)=>({name:`field_${a}`,type:"String",value:`value_${t}_${a}`})))});await new Promise((e=>setTimeout(e,100))),e.length=0}async simulateParsingLoad(){for(let e=0;e<500;e++)Array.from({length:10},((e,t)=>`@Column(name = "field_${t}") private String field${t};`)).join("\n"),await new Promise((e=>setTimeout(e,1)))}async simulateInferenceLoad(){for(let e=0;e<200;e++){const t=Array.from({length:50},((t,a)=>({name:`Entity${a}`,fields:["id","name",`entity${e}_id`]})));for(const e of t)for(const t of e.fields)t.endsWith("_id")&&Math.random();await new Promise((e=>setTimeout(e,1)))}}}class k{constructor(e){this.testName=e,this.startTime=performance.now(),this.startMemory=this.getMemoryUsage()}finish(e=0){const t=performance.now(),a=this.getMemoryUsage(),s={testName:this.testName,duration:t-this.startTime,memoryUsed:a-this.startMemory,itemsProcessed:e,timestamp:new Date};return E.getInstance().recordResult(s),s}getMemoryUsage(){return process.memoryUsage?process.memoryUsage().heapUsed:0}}class v{constructor(e,t,a){this.stateManager=e,this.configManager=t,this.webviewProvider=a,this.workerManager=new g,this.fileScanner=new f,this.mermaidGenerator=new w}async initialize(){try{await this.workerManager.start(),r.info("Worker管理器初始化完成")}catch(e){throw r.error("Worker管理器初始化失败",e),e}}async dispose(){try{await this.workerManager.shutdown(),r.info("Worker管理器已关闭")}catch(e){r.error("Worker管理器关闭失败",e)}}async handleGenerateERDiagram(){if(i.workspace.workspaceFolders)try{if(!await this.stateManager.isMyBatisProject()&&"继续"!==await i.window.showWarningMessage("当前工作空间似乎不是MyBatis项目，是否继续？","继续","取消"))return;const e=this.configManager.getExtensionConfig();if(r.info("开始生成ER图",{workspace:this.stateManager.getCurrentWorkspacePath(),config:this.configManager.getConfigSummary()}),e.autoRefresh&&this.stateManager.isCacheValid()&&"使用缓存"===await i.window.showInformationMessage("发现有效缓存，是否使用缓存数据？","使用缓存","重新生成")&&await this.stateManager.getERDiagramData())return r.info("使用缓存数据生成ER图"),void i.window.showInformationMessage("ER图生成完成（使用缓存）！");await i.window.withProgress({location:i.ProgressLocation.Notification,title:"正在生成ER图...",cancellable:!0},(async(e,t)=>{await this.performERGeneration(e,t)})),r.info("ER图生成完成"),i.window.showInformationMessage("ER图生成完成！")}catch(e){r.error("生成ER图失败",e),i.window.showErrorMessage(`生成ER图失败: ${e}`)}else i.window.showWarningMessage("请先打开一个工作空间")}async performERGeneration(e,t){e.report({increment:0,message:"扫描项目文件..."}),await this.stateManager.cleanExpiredCache();const a=await this.fileScanner.scanWorkspace({includeTests:this.configManager.getExtensionConfig().includeTestFiles});if(r.info(`文件扫描完成: ${a.stats.totalFiles}个文件`),e.report({increment:20,message:`发现${a.stats.entityCount}个实体类...`}),t.isCancellationRequested)throw new Error("用户取消了操作");const s=[];for(const e of a.javaFiles.filter((e=>e.isEntity))){if(t.isCancellationRequested)throw new Error("用户取消了操作");try{const t=await this.fileScanner.getFileContent(e.filePath),a=await this.workerManager.submitTask(d.PARSE_JAVA_FILE,{filePath:e.filePath,content:t,fileType:"java",options:{parseMethodBodies:!1}});s.push(a)}catch(t){r.warn(`解析Java文件失败: ${e.filePath}`,t)}}e.report({increment:25,message:"解析XML映射文件..."});const i=[];for(const e of a.xmlFiles.filter((e=>e.isMapper))){if(t.isCancellationRequested)throw new Error("用户取消了操作");try{const t=await this.fileScanner.getFileContent(e.filePath),a=await this.workerManager.submitTask(d.PARSE_XML_FILE,{filePath:e.filePath,content:t,fileType:"xml"});i.push(a)}catch(t){r.warn(`解析XML文件失败: ${e.filePath}`,t)}}if(e.report({increment:25,message:"推断实体关系..."}),t.isCancellationRequested)throw new Error("用户取消了操作");const n=s.flatMap((e=>e.entity?[e.entity]:[])),o=i.flatMap((e=>e.result?[e.result]:[])),c=await this.workerManager.submitTask(d.INFER_RELATIONS,{entities:n,xmlResults:o,strategies:this.configManager.getExtensionConfig().inferenceStrategies,minConfidence:.7});if(e.report({increment:20,message:"生成ER图..."}),t.isCancellationRequested)throw new Error("用户取消了操作");await this.workerManager.submitTask(d.GENERATE_DIAGRAM,{entities:n,relations:c.relations||[],options:{theme:this.configManager.getExtensionConfig().theme,format:"mermaid",includeFields:!0,includeRelations:!0}});const l={entities:n,relations:c.relations||[],generatedAt:new Date,projectPath:this.stateManager.getCurrentWorkspacePath()||""};await this.stateManager.saveERDiagramData(l),this.webviewProvider.updateDiagram(l),e.report({increment:10,message:"完成"}),r.info("ER图生成完成",{entityCount:n.length,relationCount:c.relations?.length||0,scanStats:a.stats})}async handleRefreshERDiagram(){try{r.info("开始刷新ER图"),await this.stateManager.clearERDiagramData(),await this.handleGenerateERDiagram(),r.info("ER图刷新完成")}catch(e){r.error("刷新ER图失败",e),i.window.showErrorMessage(`刷新ER图失败: ${e}`)}}async handleExportERDiagram(){try{if(!await this.stateManager.getERDiagramData())return"生成ER图"===await i.window.showInformationMessage("没有找到ER图数据，是否先生成ER图？","生成ER图","取消")?void await this.handleGenerateERDiagram():void 0;const e=this.configManager.getExtensionConfig(),t=["PNG","SVG","PDF","Mermaid文本"],a=e.exportFormat.toUpperCase(),s=await i.window.showQuickPick(t,{placeHolder:"选择导出格式",value:a});if(s){r.info(`开始导出ER图为${s}格式`);const e=await i.window.showSaveDialog({defaultUri:i.Uri.file(`er-diagram.${s.toLowerCase()}`),filters:{[s]:[s.toLowerCase()]}});e&&(r.info(`ER图将导出到: ${e.fsPath}`),i.window.showInformationMessage(`导出为${s}格式功能开发中...`))}}catch(e){r.error("导出ER图失败",e),i.window.showErrorMessage(`导出ER图失败: ${e}`)}}async handleOpenSettings(){try{r.info("打开扩展设置");const e=this.configManager.getConfigSummary(),t=this.stateManager.getStateStats();r.info("当前配置摘要",e),r.info("当前状态统计",t),await i.commands.executeCommand("workbench.action.openSettings","mybatis-er")}catch(e){r.error("打开设置失败",e),i.window.showErrorMessage(`打开设置失败: ${e}`)}}async handleShowStatus(){try{const e=this.configManager.getConfigSummary(),t=this.stateManager.getStateStats(),a=await this.stateManager.getERDiagramData(),s={workspace:t.workspacePath||"未打开工作空间",lastScan:t.lastScanTime||"从未扫描",cacheValid:t.cacheValid?"有效":"无效",hasERData:t.hasERData?"是":"否",entitiesCount:a?.entities.length||0,relationsCount:a?.relations.length||0,configValid:e.valid?"有效":"无效",enabledStrategies:e.enabledStrategies.join(", ")||"无"},n=`\nMyBatis ER Generator 状态信息：\n\n工作空间: ${s.workspace}\n最后扫描: ${s.lastScan}\n缓存状态: ${s.cacheValid}\nER图数据: ${s.hasERData}\n实体数量: ${s.entitiesCount}\n关系数量: ${s.relationsCount}\n配置状态: ${s.configValid}\n启用策略: ${s.enabledStrategies}\n            `.trim();await i.window.showInformationMessage(n,{modal:!0}),r.info("显示状态信息",s)}catch(e){r.error("显示状态信息失败",e),i.window.showErrorMessage(`显示状态信息失败: ${e}`)}}async handleClearCache(){try{"确定"===await i.window.showWarningMessage("确定要清除所有缓存数据吗？这将删除已保存的ER图数据。","确定","取消")&&(await this.stateManager.resetWorkspaceState(),i.window.showInformationMessage("缓存已清除"),r.info("用户手动清除了缓存"))}catch(e){r.error("清除缓存失败",e),i.window.showErrorMessage(`清除缓存失败: ${e}`)}}async handleTestWebView(){try{r.info("加载测试数据到WebView"),this.mermaidGenerator.generateERDiagram(y),this.webviewProvider.updateDiagram(y),i.window.showInformationMessage("测试数据已加载到ER图视图！")}catch(e){r.error("加载测试数据失败",e),i.window.showErrorMessage(`加载测试数据失败: ${e}`)}}async handlePerformanceBenchmark(){try{r.info("开始运行性能基准测试"),await i.window.withProgress({location:i.ProgressLocation.Notification,title:"正在运行性能基准测试...",cancellable:!1},(async e=>{e.report({increment:0,message:"初始化测试环境..."});const t=E.getInstance();e.report({increment:30,message:"运行基准测试套件..."}),await t.runBenchmarkSuite(),e.report({increment:100,message:"测试完成"}),await t.showPerformanceReport()})),r.info("性能基准测试完成")}catch(e){r.error("性能基准测试失败",e),i.window.showErrorMessage(`性能基准测试失败: ${e}`)}}}class T{constructor(e,t){this._extensionUri=e,this._context=t}resolveWebviewView(e,t,a){this._view=e,e.webview.options={enableScripts:!0,localResourceRoots:[this._extensionUri]},e.webview.html=this._getHtmlForWebview(e.webview),e.webview.onDidReceiveMessage((e=>{switch(e.type){case"exportDiagram":this._exportDiagram(e.format);break;case"refreshDiagram":this._refreshDiagram();break;case"searchEntities":this._searchEntities(e.query);break;case"filterRelations":this._filterRelations(e.filter)}}),void 0,this._context.subscriptions)}updateDiagram(e){this._data=e,this._view&&this._view.webview.postMessage({type:"updateDiagram",data:e})}showLoading(e="正在生成ER图..."){this._view&&this._view.webview.postMessage({type:"showLoading",message:e})}showError(e){this._view&&this._view.webview.postMessage({type:"showError",error:e})}async _exportDiagram(e){if(this._data)try{const t=await i.window.showSaveDialog({defaultUri:i.Uri.file(`er-diagram.${e}`),filters:{[e.toUpperCase()]:[e]}});t&&this._view?.webview.postMessage({type:"exportToFile",format:e,path:t.fsPath})}catch(e){i.window.showErrorMessage(`导出失败: ${e}`)}else i.window.showWarningMessage("没有可导出的ER图数据")}async _refreshDiagram(){try{this.showLoading("正在刷新ER图..."),await i.commands.executeCommand("mybatis-er.generate")}catch(e){this.showError(`刷新失败: ${e}`)}}_searchEntities(e){this._view&&this._view.webview.postMessage({type:"searchResults",query:e,results:this._performSearch(e)})}_filterRelations(e){this._view&&this._view.webview.postMessage({type:"filterResults",filter:e,data:this._applyFilter(e)})}_performSearch(e){if(!this._data||!e.trim())return[];const t=e.toLowerCase();return this._data.entities.filter((e=>e.tableName.toLowerCase().includes(t)||e.className.toLowerCase().includes(t)||e.fields.some((e=>e.fieldName.toLowerCase().includes(t)||e.columnName.toLowerCase().includes(t)))))}_applyFilter(e){if(!this._data)return{entities:[],relations:[]};let t=this._data.entities,a=this._data.relations;return e.entityType&&(t=t.filter((t=>t.annotations.some((t=>t.name===e.entityType))))),e.relationType&&(a=a.filter((t=>t.type===e.relationType))),{entities:t,relations:a}}_getHtmlForWebview(e){const t=e.asWebviewUri(i.Uri.joinPath(this._extensionUri,"media","main.js")),a=e.asWebviewUri(i.Uri.joinPath(this._extensionUri,"media","mermaid-loader.js")),s=e.asWebviewUri(i.Uri.joinPath(this._extensionUri,"media","reset.css")),r=e.asWebviewUri(i.Uri.joinPath(this._extensionUri,"media","vscode.css")),n=e.asWebviewUri(i.Uri.joinPath(this._extensionUri,"media","main.css")),o=function(){let e="";const t="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";for(let a=0;a<32;a++)e+=t.charAt(Math.floor(62*Math.random()));return e}();return`<!DOCTYPE html>\n            <html lang="zh-CN">\n            <head>\n                <meta charset="UTF-8">\n                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${e.cspSource}; script-src 'nonce-${o}' 'unsafe-eval' https://cdn.jsdelivr.net; img-src ${e.cspSource} https:; connect-src https:;">\n                <meta name="viewport" content="width=device-width, initial-scale=1.0">\n                \n                <link href="${s}" rel="stylesheet">\n                <link href="${r}" rel="stylesheet">\n                <link href="${n}" rel="stylesheet">\n                \n                <title>MyBatis ER 图</title>\n            </head>\n            <body>\n                \x3c!-- 工具栏 --\x3e\n                <div class="toolbar">\n                    <div class="toolbar-group">\n                        <button id="refreshBtn" class="toolbar-btn" title="刷新ER图">\n                            <span class="codicon codicon-refresh"></span>\n                            刷新\n                        </button>\n                        <button id="exportBtn" class="toolbar-btn" title="导出ER图">\n                            <span class="codicon codicon-export"></span>\n                            导出\n                        </button>\n                    </div>\n                    \n                    <div class="toolbar-group">\n                        <input type="text" id="searchInput" placeholder="搜索实体或字段..." class="search-input">\n                        <button id="searchBtn" class="toolbar-btn" title="搜索">\n                            <span class="codicon codicon-search"></span>\n                        </button>\n                    </div>\n                    \n                    <div class="toolbar-group">\n                        <select id="filterSelect" class="filter-select">\n                            <option value="">全部关系</option>\n                            <option value="one-to-one">一对一</option>\n                            <option value="one-to-many">一对多</option>\n                            <option value="many-to-one">多对一</option>\n                            <option value="many-to-many">多对多</option>\n                        </select>\n                    </div>\n                </div>\n                \n                \x3c!-- 主要内容区域 --\x3e\n                <div class="main-content">\n                    \x3c!-- 侧边栏 --\x3e\n                    <div class="sidebar">\n                        <div class="sidebar-section">\n                            <h3>实体列表</h3>\n                            <div id="entityList" class="entity-list"></div>\n                        </div>\n                        \n                        <div class="sidebar-section">\n                            <h3>关系统计</h3>\n                            <div id="relationStats" class="relation-stats"></div>\n                        </div>\n                    </div>\n                    \n                    \x3c!-- ER图画布 --\x3e\n                    <div class="diagram-container">\n                        <div id="loadingIndicator" class="loading-indicator" style="display: none;">\n                            <div class="loading-spinner"></div>\n                            <div class="loading-text">正在生成ER图...</div>\n                        </div>\n                        \n                        <div id="errorIndicator" class="error-indicator" style="display: none;">\n                            <div class="error-icon">⚠️</div>\n                            <div class="error-text"></div>\n                        </div>\n                        \n                        <div id="diagramCanvas" class="diagram-canvas"></div>\n                    </div>\n                </div>\n                \n                \x3c!-- 导出对话框 --\x3e\n                <div id="exportModal" class="modal" style="display: none;">\n                    <div class="modal-content">\n                        <div class="modal-header">\n                            <h3>导出ER图</h3>\n                            <button id="closeModal" class="close-btn">&times;</button>\n                        </div>\n                        <div class="modal-body">\n                            <div class="export-options">\n                                <label>\n                                    <input type="radio" name="exportFormat" value="png" checked>\n                                    PNG 图片\n                                </label>\n                                <label>\n                                    <input type="radio" name="exportFormat" value="svg">\n                                    SVG 矢量图\n                                </label>\n                                <label>\n                                    <input type="radio" name="exportFormat" value="pdf">\n                                    PDF 文档\n                                </label>\n                            </div>\n                        </div>\n                        <div class="modal-footer">\n                            <button id="confirmExport" class="btn btn-primary">导出</button>\n                            <button id="cancelExport" class="btn btn-secondary">取消</button>\n                        </div>\n                    </div>\n                </div>\n                \n                <script nonce="${o}" src="${a}"><\/script>\n                <script nonce="${o}" src="${t}"><\/script>\n            </body>\n            </html>`}}let R,b,C,S;async function M(e){r.initialize(),R=o.initialize(e),b=c.getInstance(),S=new T(e.extensionUri,e),e.subscriptions.push(i.window.registerWebviewViewProvider(T.viewType,S)),C=new v(R,b,S);try{await C.initialize(),r.info("Worker管理器初始化完成")}catch(e){return r.error("Worker管理器初始化失败",e),void i.window.showErrorMessage(`Worker管理器初始化失败: ${e}`)}r.info("MyBatis ER Generator 扩展已激活");const t=b.validateConfig();t.valid||(r.warn("配置验证失败",t.errors),i.window.showWarningMessage(`配置存在问题: ${t.errors.join(", ")}`));const a=i.commands.registerCommand("mybatis-er.generate",(()=>C.handleGenerateERDiagram())),s=i.commands.registerCommand("mybatis-er.refresh",(()=>C.handleRefreshERDiagram())),n=i.commands.registerCommand("mybatis-er.export",(()=>C.handleExportERDiagram())),l=i.commands.registerCommand("mybatis-er.settings",(()=>C.handleOpenSettings())),m=i.commands.registerCommand("mybatis-er.status",(()=>C.handleShowStatus())),h=i.commands.registerCommand("mybatis-er.clearCache",(()=>C.handleClearCache())),d=i.commands.registerCommand("mybatis-er.testWebView",(()=>C.handleTestWebView())),u=i.commands.registerCommand("mybatis-er.performanceBenchmark",(()=>C.handlePerformanceBenchmark())),g=b.onConfigChanged((e=>{r.info("配置已变更，重新应用设置",e)})),p=i.workspace.onDidChangeWorkspaceFolders((async e=>{r.info("工作空间已变更",{added:e.added.length,removed:e.removed.length}),e.removed.length>0&&await R.resetWorkspaceState()}));e.subscriptions.push(a,s,n,l,m,h,d,u,g,p,{dispose:()=>C.dispose()});const f=b.getConfigSummary(),w=R.getStateStats();i.window.showInformationMessage("MyBatis ER Generator 已就绪！"),r.info("扩展激活完成，所有命令已注册",{config:f,state:w})}async function N(){r.info("MyBatis ER Generator 扩展正在停用..."),C&&await C.dispose(),r.info("MyBatis ER Generator 扩展已停用"),r.dispose()}T.viewType="mybatis-er.erDiagramView",module.exports=s})();
+/******/ (() => { // webpackBootstrap
+/******/ 	"use strict";
+/******/ 	var __webpack_modules__ = ({
+
+/***/ "./src/commands/command-handler.ts":
+/*!*****************************************!*\
+  !*** ./src/commands/command-handler.ts ***!
+  \*****************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   CommandHandler: () => (/* binding */ CommandHandler)
+/* harmony export */ });
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vscode */ "vscode");
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(vscode__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _utils_logger__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../utils/logger */ "./src/utils/logger.ts");
+/* harmony import */ var _workers_worker_manager__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../workers/worker-manager */ "./src/workers/worker-manager.ts");
+/* harmony import */ var _utils_file_scanner__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ../utils/file-scanner */ "./src/utils/file-scanner.ts");
+/* harmony import */ var _types_worker_types__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ../types/worker-types */ "./src/types/worker-types.ts");
+/* harmony import */ var _ui_mermaid_generator__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ../ui/mermaid-generator */ "./src/ui/mermaid-generator.ts");
+/* harmony import */ var _ui_test_data__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ../ui/test-data */ "./src/ui/test-data.ts");
+/* harmony import */ var _utils_performance_tester__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ../utils/performance-tester */ "./src/utils/performance-tester.ts");
+
+
+
+
+
+
+
+
+
+class CommandHandler {
+  constructor(stateManager, configManager, webviewProvider) {
+    this.isProcessing = false;
+    this.stateManager = stateManager;
+    this.configManager = configManager;
+    this.webviewProvider = webviewProvider;
+    this.workerManager = new _workers_worker_manager__WEBPACK_IMPORTED_MODULE_2__.WorkerManager();
+    this.fileScanner = new _utils_file_scanner__WEBPACK_IMPORTED_MODULE_3__.FileScanner();
+    this.mermaidGenerator = new _ui_mermaid_generator__WEBPACK_IMPORTED_MODULE_5__.MermaidERGenerator();
+  }
+  /**
+   * 初始化Worker管理器
+   */
+  async initialize() {
+    try {
+      await this.workerManager.start();
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("Worker\u7BA1\u7406\u5668\u521D\u59CB\u5316\u5B8C\u6210");
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("Worker\u7BA1\u7406\u5668\u521D\u59CB\u5316\u5931\u8D25", error);
+      throw error;
+    }
+  }
+  /**
+   * 清理资源
+   */
+  async dispose() {
+    try {
+      await this.workerManager.shutdown();
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("Worker\u7BA1\u7406\u5668\u5DF2\u5173\u95ED");
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("Worker\u7BA1\u7406\u5668\u5173\u95ED\u5931\u8D25", error);
+    }
+  }
+  /**
+   * 生成ER图命令处理
+   */
+  async handleGenerateERDiagram() {
+    const workspaceFolders = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.workspaceFolders;
+    if (!workspaceFolders) {
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showWarningMessage("\u8BF7\u5148\u6253\u5F00\u4E00\u4E2A\u5DE5\u4F5C\u7A7A\u95F4");
+      return;
+    }
+    try {
+      const isMyBatisProject = await this.stateManager.isMyBatisProject();
+      if (!isMyBatisProject) {
+        const result = await vscode__WEBPACK_IMPORTED_MODULE_0__.window.showWarningMessage(
+          "\u5F53\u524D\u5DE5\u4F5C\u7A7A\u95F4\u4F3C\u4E4E\u4E0D\u662FMyBatis\u9879\u76EE\uFF0C\u662F\u5426\u7EE7\u7EED\uFF1F",
+          "\u7EE7\u7EED",
+          "\u53D6\u6D88"
+        );
+        if (result !== "\u7EE7\u7EED") {
+          return;
+        }
+      }
+      const config = this.configManager.getExtensionConfig();
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u5F00\u59CB\u751F\u6210ER\u56FE", {
+        workspace: this.stateManager.getCurrentWorkspacePath(),
+        config: this.configManager.getConfigSummary()
+      });
+      if (config.autoRefresh && this.stateManager.isCacheValid()) {
+        const useCache = await vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage(
+          "\u53D1\u73B0\u6709\u6548\u7F13\u5B58\uFF0C\u662F\u5426\u4F7F\u7528\u7F13\u5B58\u6570\u636E\uFF1F",
+          "\u4F7F\u7528\u7F13\u5B58",
+          "\u91CD\u65B0\u751F\u6210"
+        );
+        if (useCache === "\u4F7F\u7528\u7F13\u5B58") {
+          const cachedData = await this.stateManager.getERDiagramData();
+          if (cachedData) {
+            _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u4F7F\u7528\u7F13\u5B58\u6570\u636E\u751F\u6210ER\u56FE");
+            vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage("ER\u56FE\u751F\u6210\u5B8C\u6210\uFF08\u4F7F\u7528\u7F13\u5B58\uFF09\uFF01");
+            return;
+          }
+        }
+      }
+      await vscode__WEBPACK_IMPORTED_MODULE_0__.window.withProgress({
+        location: vscode__WEBPACK_IMPORTED_MODULE_0__.ProgressLocation.Notification,
+        title: "\u6B63\u5728\u751F\u6210ER\u56FE...",
+        cancellable: true
+      }, async (progress, token) => {
+        await this.performERGeneration(progress, token);
+      });
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("ER\u56FE\u751F\u6210\u5B8C\u6210");
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage("ER\u56FE\u751F\u6210\u5B8C\u6210\uFF01");
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u751F\u6210ER\u56FE\u5931\u8D25", error);
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage(`\u751F\u6210ER\u56FE\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 执行ER图生成的核心逻辑
+   */
+  async performERGeneration(progress, token) {
+    progress.report({ increment: 0, message: "\u626B\u63CF\u9879\u76EE\u6587\u4EF6..." });
+    await this.stateManager.cleanExpiredCache();
+    const scanResult = await this.fileScanner.scanWorkspace({
+      includeTests: this.configManager.getExtensionConfig().includeTestFiles
+    });
+    _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info(`\u6587\u4EF6\u626B\u63CF\u5B8C\u6210: ${scanResult.stats.totalFiles}\u4E2A\u6587\u4EF6`);
+    progress.report({ increment: 20, message: `\u53D1\u73B0${scanResult.stats.entityCount}\u4E2A\u5B9E\u4F53\u7C7B...` });
+    if (token.isCancellationRequested) {
+      throw new Error("\u7528\u6237\u53D6\u6D88\u4E86\u64CD\u4F5C");
+    }
+    const javaParseResults = await this.batchProcessJavaFiles(scanResult.javaFiles.filter((f) => f.isEntity), progress, token, 20, 25);
+    progress.report({ increment: 25, message: "\u89E3\u6790XML\u6620\u5C04\u6587\u4EF6..." });
+    const xmlParseResults = await this.batchProcessXmlFiles(scanResult.xmlFiles.filter((f) => f.isMapper), progress, token, 25, 25);
+    progress.report({ increment: 25, message: "\u63A8\u65AD\u5B9E\u4F53\u5173\u7CFB..." });
+    if (token.isCancellationRequested) {
+      throw new Error("\u7528\u6237\u53D6\u6D88\u4E86\u64CD\u4F5C");
+    }
+    const relationResult = await this.performRelationInference(javaParseResults, xmlParseResults, token);
+    progress.report({ increment: 20, message: "\u751F\u6210ER\u56FE..." });
+    if (token.isCancellationRequested) {
+      throw new Error("\u7528\u6237\u53D6\u6D88\u4E86\u64CD\u4F5C");
+    }
+    const diagramResult = await this.generateERDiagramData(javaParseResults, xmlParseResults, relationResult);
+    const erData = {
+      entities: diagramResult.entities,
+      relations: diagramResult.relations,
+      mermaidCode: diagramResult.mermaidCode,
+      metadata: diagramResult.metadata,
+      generatedAt: /* @__PURE__ */ new Date(),
+      projectPath: this.stateManager.getCurrentWorkspacePath() || ""
+    };
+    await this.stateManager.saveERDiagramData(erData);
+    this.webviewProvider.updateDiagram(erData);
+    progress.report({ increment: 10, message: "\u5B8C\u6210" });
+    _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("ER\u56FE\u751F\u6210\u5B8C\u6210", {
+      entityCount: diagramResult.entities.length,
+      relationCount: diagramResult.relations.length,
+      scanStats: scanResult.stats
+    });
+  }
+  /**
+   * 新增：批量处理Java文件
+   */
+  async batchProcessJavaFiles(javaFiles, progress, token, startProgress, progressRange) {
+    if (javaFiles.length === 0) {
+      return [];
+    }
+    const results = [];
+    const batchSize = Math.min(3, Math.max(1, Math.floor(javaFiles.length / 4)));
+    const batches = this.chunkArray(javaFiles, batchSize);
+    _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info(`\u6279\u91CF\u5904\u7406Java\u6587\u4EF6: ${javaFiles.length}\u4E2A\u6587\u4EF6\uFF0C${batches.length}\u4E2A\u6279\u6B21`);
+    for (let i = 0; i < batches.length; i++) {
+      if (token.isCancellationRequested) {
+        throw new Error("\u7528\u6237\u53D6\u6D88\u4E86\u64CD\u4F5C");
+      }
+      const batch = batches[i];
+      const batchProgress = startProgress + i * progressRange / batches.length;
+      progress.report({
+        increment: batchProgress,
+        message: `\u5904\u7406Java\u6587\u4EF6\u6279\u6B21 ${i + 1}/${batches.length} (${batch.length}\u4E2A\u6587\u4EF6)`
+      });
+      try {
+        const batchData = await Promise.all(
+          batch.map(async (file) => ({
+            filePath: file.filePath,
+            content: await this.fileScanner.getFileContent(file.filePath),
+            fileType: "java",
+            options: { parseMethodBodies: false }
+          }))
+        );
+        const batchResult = await this.workerManager.submitTask(
+          _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.PARSE_BATCH_FILES,
+          { files: batchData },
+          {
+            timeout: Math.min(8e3, 3e3 * batch.length),
+            // 减少到8秒最大，每个文件3秒
+            maxRetries: 1
+          }
+        );
+        if (Array.isArray(batchResult)) {
+          results.push(...batchResult);
+        } else {
+          results.push(batchResult);
+        }
+        _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.debug(`\u6279\u6B21 ${i + 1} \u5904\u7406\u5B8C\u6210\uFF0C\u89E3\u6790\u4E86 ${batch.length} \u4E2A\u6587\u4EF6`);
+      } catch (error) {
+        _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.warn(`\u6279\u91CF\u5904\u7406Java\u6587\u4EF6\u5931\u8D25\uFF0C\u5C1D\u8BD5\u964D\u7EA7\u5904\u7406`, error);
+        for (const file of batch) {
+          try {
+            const content = await this.fileScanner.getFileContent(file.filePath);
+            const syncResult = await this.parseJavaFileSync({
+              filePath: file.filePath,
+              content,
+              fileType: "java",
+              options: { parseMethodBodies: false }
+            });
+            results.push(syncResult);
+          } catch (syncError) {
+            _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.warn(`\u540C\u6B65\u89E3\u6790\u5931\u8D25: ${file.filePath}`, syncError);
+          }
+        }
+      }
+      if (i < batches.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    return results;
+  }
+  /**
+   * 新增：批量处理XML文件
+   */
+  async batchProcessXmlFiles(xmlFiles, progress, token, startProgress, progressRange) {
+    if (xmlFiles.length === 0) {
+      return [];
+    }
+    const results = [];
+    const batchSize = Math.min(4, Math.max(1, Math.floor(xmlFiles.length / 3)));
+    const batches = this.chunkArray(xmlFiles, batchSize);
+    _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info(`\u6279\u91CF\u5904\u7406XML\u6587\u4EF6: ${xmlFiles.length}\u4E2A\u6587\u4EF6\uFF0C${batches.length}\u4E2A\u6279\u6B21`);
+    for (let i = 0; i < batches.length; i++) {
+      if (token.isCancellationRequested) {
+        throw new Error("\u7528\u6237\u53D6\u6D88\u4E86\u64CD\u4F5C");
+      }
+      const batch = batches[i];
+      const batchProgress = startProgress + i * progressRange / batches.length;
+      progress.report({
+        increment: batchProgress,
+        message: `\u5904\u7406XML\u6587\u4EF6\u6279\u6B21 ${i + 1}/${batches.length} (${batch.length}\u4E2A\u6587\u4EF6)`
+      });
+      try {
+        const batchData = await Promise.all(
+          batch.map(async (file) => ({
+            filePath: file.filePath,
+            content: await this.fileScanner.getFileContent(file.filePath),
+            fileType: "xml"
+          }))
+        );
+        const batchResult = await this.workerManager.submitTask(
+          _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.PARSE_BATCH_FILES,
+          { files: batchData },
+          {
+            timeout: Math.min(6e3, 2e3 * batch.length),
+            // 减少到6秒最大，每个文件2秒
+            maxRetries: 1
+          }
+        );
+        if (Array.isArray(batchResult)) {
+          results.push(...batchResult);
+        } else {
+          results.push(batchResult);
+        }
+        _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.debug(`XML\u6279\u6B21 ${i + 1} \u5904\u7406\u5B8C\u6210\uFF0C\u89E3\u6790\u4E86 ${batch.length} \u4E2A\u6587\u4EF6`);
+      } catch (error) {
+        _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.warn(`\u6279\u91CF\u5904\u7406XML\u6587\u4EF6\u5931\u8D25\uFF0C\u5C1D\u8BD5\u964D\u7EA7\u5904\u7406`, error);
+        for (const file of batch) {
+          try {
+            const content = await this.fileScanner.getFileContent(file.filePath);
+            const syncResult = await this.parseXmlFileSync({
+              filePath: file.filePath,
+              content,
+              fileType: "xml"
+            });
+            results.push(syncResult);
+          } catch (syncError) {
+            _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.warn(`\u540C\u6B65\u89E3\u6790XML\u5931\u8D25: ${file.filePath}`, syncError);
+          }
+        }
+      }
+      if (i < batches.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+    }
+    return results;
+  }
+  /**
+   * 新增：执行关系推断
+   */
+  async performRelationInference(javaResults, xmlResults, token) {
+    if (token.isCancellationRequested) {
+      throw new Error("\u7528\u6237\u53D6\u6D88\u4E86\u64CD\u4F5C");
+    }
+    try {
+      const configStrategies = this.configManager.getExtensionConfig().inferenceStrategies;
+      const strategies = [
+        { name: "naming-convention", weight: 0.8, enabled: configStrategies.naming, minConfidence: 0.6 },
+        { name: "annotation-based", weight: 0.9, enabled: configStrategies.annotation, minConfidence: 0.7 },
+        { name: "xml-mapping", weight: 0.85, enabled: configStrategies.xml, minConfidence: 0.75 },
+        { name: "field-type-analysis", weight: 0.7, enabled: configStrategies.semantic, minConfidence: 0.5 }
+      ];
+      const relationResult = await this.workerManager.submitTask(
+        _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.INFER_RELATIONS,
+        {
+          entities: javaResults.filter((r) => r && r.success !== false),
+          mappings: xmlResults.filter((r) => r && r.success !== false),
+          strategies
+        },
+        {
+          timeout: 15e3,
+          // 关系推断可能需要更长时间
+          maxRetries: 1
+        }
+      );
+      return relationResult;
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.warn("Worker\u5173\u7CFB\u63A8\u65AD\u5931\u8D25\uFF0C\u5C1D\u8BD5\u540C\u6B65\u63A8\u65AD", error);
+      return this.performRelationInferenceSync(javaResults, xmlResults);
+    }
+  }
+  /**
+   * 新增：生成ER图数据
+   */
+  async generateERDiagramData(javaResults, xmlResults, relationResults) {
+    const entities = javaResults.filter((r) => r && r.success !== false);
+    const mappings = xmlResults.filter((r) => r && r.success !== false);
+    const relations = relationResults?.relations || [];
+    const mermaidCode = this.mermaidGenerator.generateERDiagram({
+      entities,
+      relations,
+      generatedAt: /* @__PURE__ */ new Date(),
+      projectPath: this.stateManager.getCurrentWorkspacePath() || ""
+    });
+    return {
+      entities,
+      relations,
+      mermaidCode,
+      metadata: {
+        generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        totalEntities: entities.length,
+        totalRelations: relations.length,
+        confidence: relationResults?.confidence || 0,
+        processingStats: {
+          javaFiles: javaResults.length,
+          xmlFiles: xmlResults.length,
+          workerStats: this.workerManager.getStats()
+        }
+      }
+    };
+  }
+  /**
+   * 新增：同步Java文件解析（降级方案）
+   */
+  async parseJavaFileSync(fileData) {
+    try {
+      const { SmartJavaParser } = await __webpack_require__.e(/*! import() */ "src_parsers_java-parser_ts").then(__webpack_require__.bind(__webpack_require__, /*! ../parsers/java-parser */ "./src/parsers/java-parser.ts"));
+      const parser = new SmartJavaParser();
+      return await parser.parseJavaFile(fileData.filePath, fileData.content);
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.warn(`\u540C\u6B65Java\u89E3\u6790\u5931\u8D25: ${fileData.filePath}`, error);
+      return {
+        filePath: fileData.filePath,
+        error: error.message,
+        success: false
+      };
+    }
+  }
+  /**
+   * 新增：同步XML文件解析（降级方案）
+   */
+  async parseXmlFileSync(fileData) {
+    try {
+      const { SmartXmlParser } = await __webpack_require__.e(/*! import() */ "src_parsers_xml-parser_ts").then(__webpack_require__.bind(__webpack_require__, /*! ../parsers/xml-parser */ "./src/parsers/xml-parser.ts"));
+      const parser = new SmartXmlParser();
+      return await parser.parseXmlFile(fileData.filePath, fileData.content);
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.warn(`\u540C\u6B65XML\u89E3\u6790\u5931\u8D25: ${fileData.filePath}`, error);
+      return {
+        filePath: fileData.filePath,
+        error: error.message,
+        success: false
+      };
+    }
+  }
+  /**
+   * 新增：同步关系推断（降级方案）
+   */
+  async performRelationInferenceSync(javaResults, xmlResults) {
+    try {
+      const { RelationInferenceEngine } = await __webpack_require__.e(/*! import() */ "src_parsers_relation-inference_ts").then(__webpack_require__.bind(__webpack_require__, /*! ../parsers/relation-inference */ "./src/parsers/relation-inference.ts"));
+      const engine = new RelationInferenceEngine();
+      const entities = javaResults.filter((r) => r && r.success !== false);
+      const mappings = xmlResults.filter((r) => r && r.success !== false);
+      const configStrategies = this.configManager.getExtensionConfig().inferenceStrategies;
+      const strategies = [
+        { name: "naming-convention", weight: 0.8, enabled: configStrategies.naming, minConfidence: 0.6 },
+        { name: "annotation-based", weight: 0.9, enabled: configStrategies.annotation, minConfidence: 0.7 },
+        { name: "xml-mapping", weight: 0.85, enabled: configStrategies.xml, minConfidence: 0.75 },
+        { name: "field-type-analysis", weight: 0.7, enabled: configStrategies.semantic, minConfidence: 0.5 }
+      ];
+      return await engine.inferRelations(entities, mappings, {
+        strategies
+      });
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.warn("\u540C\u6B65\u5173\u7CFB\u63A8\u65AD\u5931\u8D25", error);
+      return {
+        relations: [],
+        confidence: 0,
+        error: error.message
+      };
+    }
+  }
+  /**
+   * 新增：数组分块工具方法
+   */
+  chunkArray(array, chunkSize) {
+    const chunks = [];
+    for (let i = 0; i < array.length; i += chunkSize) {
+      chunks.push(array.slice(i, i + chunkSize));
+    }
+    return chunks;
+  }
+  /**
+   * 刷新ER图命令处理 - 优化版本
+   */
+  async handleRefreshERDiagram() {
+    if (this.isProcessing) {
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showWarningMessage("ER\u56FE\u751F\u6210\u6B63\u5728\u8FDB\u884C\u4E2D\uFF0C\u8BF7\u7A0D\u5019...");
+      return;
+    }
+    try {
+      await this.stateManager.clearERDiagramData();
+      await this.stateManager.cleanExpiredCache();
+      await this.handleGenerateERDiagram();
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u5237\u65B0ER\u56FE\u5931\u8D25", error);
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage(`\u5237\u65B0ER\u56FE\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 显示状态命令处理 - 增强版本
+   */
+  async handleShowStatus() {
+    try {
+      const workerStats = this.workerManager.getStats();
+      const healthStatus = this.workerManager.getHealthStatus();
+      const stateStats = this.stateManager.getStateStats();
+      const configSummary = this.configManager.getConfigSummary();
+      const memUsage = process.memoryUsage();
+      const statusInfo = {
+        "\u{1F527} Worker\u72B6\u6001": {
+          "\u6D3B\u8DC3Worker": `${workerStats.activeWorkers}/${workerStats.activeWorkers + workerStats.idleWorkers}`,
+          "\u961F\u5217\u4EFB\u52A1": workerStats.queuedTasks,
+          "\u5904\u7406\u4E2D\u4EFB\u52A1": workerStats.processingTasks,
+          "\u5DF2\u5B8C\u6210\u4EFB\u52A1": workerStats.totalProcessedTasks,
+          "\u5E73\u5747\u961F\u5217\u65F6\u95F4": `${workerStats.averageQueueTime}ms`
+        },
+        "\u{1F4BE} \u5185\u5B58\u4F7F\u7528": {
+          "\u5806\u5185\u5B58": `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+          "\u603B\u5185\u5B58": `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+          "\u5916\u90E8\u5185\u5B58": `${Math.round(memUsage.external / 1024 / 1024)}MB`
+        },
+        "\u{1F3E5} \u5065\u5EB7\u72B6\u6001": {
+          "\u72B6\u6001": healthStatus.healthy ? "\u2705 \u5065\u5EB7" : "\u26A0\uFE0F \u5F02\u5E38",
+          "\u95EE\u9898": healthStatus.issues.length > 0 ? healthStatus.issues.join(", ") : "\u65E0",
+          "\u5EFA\u8BAE": healthStatus.recommendations.length > 0 ? healthStatus.recommendations.join(", ") : "\u65E0"
+        },
+        "\u{1F4CA} \u7F13\u5B58\u72B6\u6001": stateStats,
+        "\u2699\uFE0F \u914D\u7F6E": configSummary
+      };
+      const statusText = Object.entries(statusInfo).map(([category, data]) => {
+        const items = Object.entries(data).map(([key, value]) => `  ${key}: ${value}`).join("\n");
+        return `${category}
+${items}`;
+      }).join("\n\n");
+      const action = await vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage(
+        "MyBatis ER Generator \u72B6\u6001\u4FE1\u606F",
+        { modal: true, detail: statusText },
+        "\u590D\u5236\u5230\u526A\u8D34\u677F",
+        "\u6E05\u7406\u7F13\u5B58",
+        "\u91CD\u542FWorker"
+      );
+      if (action === "\u590D\u5236\u5230\u526A\u8D34\u677F") {
+        await vscode__WEBPACK_IMPORTED_MODULE_0__.env.clipboard.writeText(statusText);
+        vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage("\u72B6\u6001\u4FE1\u606F\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F");
+      } else if (action === "\u6E05\u7406\u7F13\u5B58") {
+        await this.handleClearCache();
+      } else if (action === "\u91CD\u542FWorker") {
+        await this.restartWorkerManager();
+      }
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u83B7\u53D6\u72B6\u6001\u4FE1\u606F\u5931\u8D25", error);
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage(`\u83B7\u53D6\u72B6\u6001\u4FE1\u606F\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 新增：重启Worker管理器
+   */
+  async restartWorkerManager() {
+    try {
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage("\u6B63\u5728\u91CD\u542FWorker\u7BA1\u7406\u5668...");
+      await this.workerManager.shutdown();
+      const workerConfig = this.getOptimizedWorkerConfig();
+      this.workerManager = new _workers_worker_manager__WEBPACK_IMPORTED_MODULE_2__.WorkerManager(workerConfig);
+      await this.workerManager.start();
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage("Worker\u7BA1\u7406\u5668\u91CD\u542F\u5B8C\u6210");
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("Worker\u7BA1\u7406\u5668\u91CD\u542F\u5B8C\u6210");
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u91CD\u542FWorker\u7BA1\u7406\u5668\u5931\u8D25", error);
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage(`\u91CD\u542FWorker\u7BA1\u7406\u5668\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 获取优化的Worker配置
+   */
+  getOptimizedWorkerConfig() {
+    const cpuCount = (__webpack_require__(/*! os */ "os").cpus)().length;
+    return {
+      maxWorkers: Math.min(cpuCount, 6),
+      // 进一步减少到最多6个Worker
+      workerTimeout: 1e4,
+      // 进一步减少到10秒
+      maxQueueSize: 30,
+      // 进一步减少队列大小
+      heartbeatInterval: 2e3,
+      // 更频繁的心跳检测
+      maxRetries: 1,
+      // 只重试1次
+      enableProfiling: false
+    };
+  }
+  /**
+   * 清除缓存命令处理 - 增强版本
+   */
+  async handleClearCache() {
+    try {
+      const result = await vscode__WEBPACK_IMPORTED_MODULE_0__.window.showWarningMessage(
+        "\u786E\u5B9A\u8981\u6E05\u9664\u6240\u6709\u7F13\u5B58\u5417\uFF1F\u8FD9\u5C06\u5220\u9664\u5DF2\u89E3\u6790\u7684\u6570\u636E\u3002",
+        "\u786E\u5B9A",
+        "\u53D6\u6D88"
+      );
+      if (result === "\u786E\u5B9A") {
+        await this.stateManager.clearERDiagramData();
+        await this.stateManager.cleanExpiredCache();
+        const workerStats = this.workerManager.getStats();
+        if (workerStats.activeWorkers > 0) {
+          _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u6E05\u7406Worker\u72B6\u6001");
+        }
+        vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage("\u7F13\u5B58\u5DF2\u6E05\u9664");
+        _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u7528\u6237\u624B\u52A8\u6E05\u9664\u7F13\u5B58");
+      }
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u6E05\u9664\u7F13\u5B58\u5931\u8D25", error);
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage(`\u6E05\u9664\u7F13\u5B58\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 测试WebView界面 - 加载示例数据
+   */
+  async handleTestWebView() {
+    try {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u52A0\u8F7D\u6D4B\u8BD5\u6570\u636E\u5230WebView");
+      const mermaidCode = this.mermaidGenerator.generateERDiagram(_ui_test_data__WEBPACK_IMPORTED_MODULE_6__.testERData);
+      this.webviewProvider.updateDiagram(_ui_test_data__WEBPACK_IMPORTED_MODULE_6__.testERData);
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage("\u6D4B\u8BD5\u6570\u636E\u5DF2\u52A0\u8F7D\u5230ER\u56FE\u89C6\u56FE\uFF01");
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u52A0\u8F7D\u6D4B\u8BD5\u6570\u636E\u5931\u8D25", error);
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage(`\u52A0\u8F7D\u6D4B\u8BD5\u6570\u636E\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 运行性能基准测试
+   */
+  async handlePerformanceBenchmark() {
+    try {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u5F00\u59CB\u8FD0\u884C\u6027\u80FD\u57FA\u51C6\u6D4B\u8BD5");
+      await vscode__WEBPACK_IMPORTED_MODULE_0__.window.withProgress({
+        location: vscode__WEBPACK_IMPORTED_MODULE_0__.ProgressLocation.Notification,
+        title: "\u6B63\u5728\u8FD0\u884C\u6027\u80FD\u57FA\u51C6\u6D4B\u8BD5...",
+        cancellable: false
+      }, async (progress) => {
+        progress.report({ increment: 0, message: "\u521D\u59CB\u5316\u6D4B\u8BD5\u73AF\u5883..." });
+        const tester = _utils_performance_tester__WEBPACK_IMPORTED_MODULE_7__.PerformanceTester.getInstance();
+        progress.report({ increment: 30, message: "\u8FD0\u884C\u57FA\u51C6\u6D4B\u8BD5\u5957\u4EF6..." });
+        const report = await tester.runBenchmarkSuite();
+        progress.report({ increment: 100, message: "\u6D4B\u8BD5\u5B8C\u6210" });
+        await tester.showPerformanceReport();
+      });
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u6027\u80FD\u57FA\u51C6\u6D4B\u8BD5\u5B8C\u6210");
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u6027\u80FD\u57FA\u51C6\u6D4B\u8BD5\u5931\u8D25", error);
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage(`\u6027\u80FD\u57FA\u51C6\u6D4B\u8BD5\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 简单的扩展功能测试
+   */
+  async handleSimpleTest() {
+    try {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u5F00\u59CB\u7B80\u5355\u529F\u80FD\u6D4B\u8BD5");
+      const workerStats = this.workerManager.getStats();
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("Worker\u72B6\u6001", workerStats);
+      const stateStats = this.stateManager.getStateStats();
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u72B6\u6001\u7BA1\u7406\u5668", stateStats);
+      const configSummary = this.configManager.getConfigSummary();
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u914D\u7F6E\u7BA1\u7406\u5668", configSummary);
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage(
+        `\u6269\u5C55\u529F\u80FD\u6D4B\u8BD5\u5B8C\u6210\uFF01
+Worker\u72B6\u6001: ${workerStats.activeWorkers + workerStats.idleWorkers}\u4E2AWorker
+\u914D\u7F6E\u72B6\u6001: \u6B63\u5E38
+\u72B6\u6001\u7BA1\u7406: \u6B63\u5E38`
+      );
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u7B80\u5355\u529F\u80FD\u6D4B\u8BD5\u5B8C\u6210");
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u7B80\u5355\u529F\u80FD\u6D4B\u8BD5\u5931\u8D25", error);
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage(`\u529F\u80FD\u6D4B\u8BD5\u5931\u8D25: ${error}`);
+    }
+  }
+}
+
+
+/***/ }),
+
+/***/ "./src/types/worker-types.ts":
+/*!***********************************!*\
+  !*** ./src/types/worker-types.ts ***!
+  \***********************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   WorkerErrorType: () => (/* binding */ WorkerErrorType),
+/* harmony export */   WorkerEventType: () => (/* binding */ WorkerEventType),
+/* harmony export */   WorkerMessageType: () => (/* binding */ WorkerMessageType),
+/* harmony export */   WorkerStatus: () => (/* binding */ WorkerStatus)
+/* harmony export */ });
+
+var WorkerMessageType = /* @__PURE__ */ ((WorkerMessageType2) => {
+  WorkerMessageType2["PARSE_JAVA_FILE"] = "PARSE_JAVA_FILE";
+  WorkerMessageType2["PARSE_XML_FILE"] = "PARSE_XML_FILE";
+  WorkerMessageType2["PARSE_BATCH_FILES"] = "PARSE_BATCH_FILES";
+  WorkerMessageType2["INFER_RELATIONS"] = "INFER_RELATIONS";
+  WorkerMessageType2["VALIDATE_RELATIONS"] = "VALIDATE_RELATIONS";
+  WorkerMessageType2["GENERATE_DIAGRAM"] = "GENERATE_DIAGRAM";
+  WorkerMessageType2["EXPORT_DIAGRAM"] = "EXPORT_DIAGRAM";
+  WorkerMessageType2["PING"] = "PING";
+  WorkerMessageType2["PONG"] = "PONG";
+  WorkerMessageType2["TERMINATE"] = "TERMINATE";
+  WorkerMessageType2["ERROR"] = "ERROR";
+  WorkerMessageType2["PROGRESS"] = "PROGRESS";
+  return WorkerMessageType2;
+})(WorkerMessageType || {});
+var WorkerStatus = /* @__PURE__ */ ((WorkerStatus2) => {
+  WorkerStatus2["IDLE"] = "idle";
+  WorkerStatus2["BUSY"] = "busy";
+  WorkerStatus2["ERROR"] = "error";
+  WorkerStatus2["TERMINATED"] = "terminated";
+  return WorkerStatus2;
+})(WorkerStatus || {});
+var WorkerErrorType = /* @__PURE__ */ ((WorkerErrorType2) => {
+  WorkerErrorType2["TIMEOUT"] = "timeout";
+  WorkerErrorType2["PARSE_ERROR"] = "parse_error";
+  WorkerErrorType2["MEMORY_ERROR"] = "memory_error";
+  WorkerErrorType2["NETWORK_ERROR"] = "network_error";
+  WorkerErrorType2["VALIDATION_ERROR"] = "validation_error";
+  WorkerErrorType2["UNKNOWN_ERROR"] = "unknown_error";
+  return WorkerErrorType2;
+})(WorkerErrorType || {});
+var WorkerEventType = /* @__PURE__ */ ((WorkerEventType2) => {
+  WorkerEventType2["WORKER_CREATED"] = "worker_created";
+  WorkerEventType2["WORKER_TERMINATED"] = "worker_terminated";
+  WorkerEventType2["TASK_STARTED"] = "task_started";
+  WorkerEventType2["TASK_COMPLETED"] = "task_completed";
+  WorkerEventType2["TASK_FAILED"] = "task_failed";
+  WorkerEventType2["QUEUE_FULL"] = "queue_full";
+  WorkerEventType2["PERFORMANCE_WARNING"] = "performance_warning";
+  return WorkerEventType2;
+})(WorkerEventType || {});
+
+
+/***/ }),
+
+/***/ "./src/ui/mermaid-generator.ts":
+/*!*************************************!*\
+  !*** ./src/ui/mermaid-generator.ts ***!
+  \*************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   MermaidERGenerator: () => (/* binding */ MermaidERGenerator)
+/* harmony export */ });
+
+class MermaidERGenerator {
+  /**
+   * 生成完整的Mermaid ER图代码
+   */
+  generateERDiagram(data) {
+    const { entities, relations } = data;
+    if (!entities || entities.length === 0) {
+      return this.generateEmptyDiagram();
+    }
+    let mermaidCode = "erDiagram\n";
+    mermaidCode += this.generateEntities(entities);
+    if (relations && relations.length > 0) {
+      mermaidCode += "\n";
+      mermaidCode += this.generateRelations(relations);
+    }
+    return mermaidCode;
+  }
+  /**
+   * 生成空图表提示
+   */
+  generateEmptyDiagram() {
+    return `erDiagram
+    NO_ENTITIES {
+        string message "\u672A\u627E\u5230MyBatis\u5B9E\u4F53\u7C7B"
+        string suggestion "\u8BF7\u786E\u4FDD\u9879\u76EE\u5305\u542B@TableName\u7B49\u6CE8\u89E3\u7684\u5B9E\u4F53\u7C7B"
+    }`;
+  }
+  /**
+   * 生成实体定义
+   */
+  generateEntities(entities) {
+    return entities.map((entity) => this.generateEntity(entity)).join("\n\n");
+  }
+  /**
+   * 生成单个实体定义
+   */
+  generateEntity(entity) {
+    const tableName = this.sanitizeTableName(entity.tableName);
+    let entityCode = `    ${tableName} {
+`;
+    if (entity.fields && entity.fields.length > 0) {
+      const fieldDefinitions = entity.fields.map(
+        (field) => this.generateField(field)
+      ).join("\n");
+      entityCode += fieldDefinitions;
+    } else {
+      entityCode += '        string placeholder "\u6682\u65E0\u5B57\u6BB5\u4FE1\u606F"\n';
+    }
+    entityCode += "    }";
+    const comment = this.generateEntityComment(entity);
+    if (comment) {
+      entityCode += ` %% ${comment}`;
+    }
+    return entityCode;
+  }
+  /**
+   * 生成字段定义
+   */
+  generateField(field) {
+    const columnType = this.mapJavaTypeToDBType(field.javaType);
+    const columnName = this.sanitizeColumnName(field.columnName);
+    const constraints = this.generateFieldConstraints(field);
+    return `        ${columnType} ${columnName}${constraints}`;
+  }
+  /**
+   * 生成字段约束
+   */
+  generateFieldConstraints(field) {
+    const constraints = [];
+    if (field.isPrimaryKey) {
+      constraints.push("PK");
+    }
+    if (field.isNotNull) {
+      constraints.push("NOT NULL");
+    }
+    if (field.isUnique) {
+      constraints.push("UNIQUE");
+    }
+    if (field.defaultValue) {
+      constraints.push(`DEFAULT "${field.defaultValue}"`);
+    }
+    if (field.comment) {
+      constraints.push(`"${field.comment}"`);
+    }
+    return constraints.length > 0 ? ` ${constraints.join(" ")}` : "";
+  }
+  /**
+   * 生成实体注释
+   */
+  generateEntityComment(entity) {
+    const comments = [];
+    if (entity.className) {
+      comments.push(`Java\u7C7B: ${entity.className}`);
+    }
+    if (entity.comment) {
+      comments.push(entity.comment);
+    }
+    const tableAnnotation = entity.annotations.find(
+      (ann) => ann.name === "TableName" || ann.name === "Table"
+    );
+    if (tableAnnotation) {
+      comments.push(`\u6CE8\u89E3: @${tableAnnotation.name}`);
+    }
+    return comments.join(", ");
+  }
+  /**
+   * 生成关系定义
+   */
+  generateRelations(relations) {
+    return relations.map((relation) => this.generateRelation(relation)).join("\n");
+  }
+  /**
+   * 生成单个关系定义
+   */
+  generateRelation(relation) {
+    const fromTable = this.sanitizeTableName(relation.fromTable);
+    const toTable = this.sanitizeTableName(relation.toTable);
+    const relationshipSymbol = this.getRelationshipSymbol(relation.type);
+    let relationCode = `    ${fromTable} ${relationshipSymbol} ${toTable}`;
+    if (relation.fromField || relation.toField) {
+      const label = this.generateRelationLabel(relation);
+      relationCode += ` : ${label}`;
+    }
+    const comment = this.generateRelationComment(relation);
+    if (comment) {
+      relationCode += ` %% ${comment}`;
+    }
+    return relationCode;
+  }
+  /**
+   * 获取关系符号
+   */
+  getRelationshipSymbol(relationType) {
+    switch (relationType.toLowerCase()) {
+      case "one-to-one":
+        return "||--||";
+      case "one-to-many":
+        return "||--o{";
+      case "many-to-one":
+        return "}o--||";
+      case "many-to-many":
+        return "}o--o{";
+      default:
+        return "||--||";
+    }
+  }
+  /**
+   * 生成关系标签
+   */
+  generateRelationLabel(relation) {
+    const labels = [];
+    if (relation.fromField) {
+      labels.push(relation.fromField);
+    }
+    if (relation.toField && relation.toField !== relation.fromField) {
+      labels.push(relation.toField);
+    }
+    return labels.join("-");
+  }
+  /**
+   * 生成关系注释
+   */
+  generateRelationComment(relation) {
+    const comments = [];
+    if (relation.confidence !== void 0) {
+      comments.push(`\u7F6E\u4FE1\u5EA6: ${(relation.confidence * 100).toFixed(1)}%`);
+    }
+    if (relation.source) {
+      comments.push(`\u6765\u6E90: ${relation.source}`);
+    }
+    if (relation.description) {
+      comments.push(relation.description);
+    }
+    return comments.join(", ");
+  }
+  /**
+   * Java类型到数据库类型的映射
+   */
+  mapJavaTypeToDBType(javaType) {
+    const typeMapping = {
+      "String": "varchar",
+      "Integer": "int",
+      "int": "int",
+      "Long": "bigint",
+      "long": "bigint",
+      "Double": "double",
+      "double": "double",
+      "Float": "float",
+      "float": "float",
+      "Boolean": "boolean",
+      "boolean": "boolean",
+      "Date": "datetime",
+      "LocalDate": "date",
+      "LocalDateTime": "datetime",
+      "LocalTime": "time",
+      "Timestamp": "timestamp",
+      "BigDecimal": "decimal",
+      "byte[]": "blob",
+      "Byte[]": "blob"
+    };
+    const baseType = javaType.split("<")[0];
+    return typeMapping[baseType] || "varchar";
+  }
+  /**
+   * 清理表名，确保符合Mermaid语法
+   */
+  sanitizeTableName(tableName) {
+    if (!tableName) {
+      return "UNKNOWN_TABLE";
+    }
+    return tableName.replace(/[^a-zA-Z0-9_]/g, "_").toUpperCase();
+  }
+  /**
+   * 清理列名，确保符合Mermaid语法
+   */
+  sanitizeColumnName(columnName) {
+    if (!columnName) {
+      return "unknown_column";
+    }
+    return columnName.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
+  }
+  /**
+   * 生成带主题的Mermaid图表
+   */
+  generateThemedDiagram(data, theme = "default") {
+    const diagram = this.generateERDiagram(data);
+    const themeConfig = this.getThemeConfig(theme);
+    return `%%{init: ${themeConfig}}%%
+${diagram}`;
+  }
+  /**
+   * 获取主题配置
+   */
+  getThemeConfig(theme) {
+    const themeConfigs = {
+      default: '{"theme": "default"}',
+      dark: '{"theme": "dark"}',
+      forest: '{"theme": "forest"}',
+      neutral: '{"theme": "neutral"}'
+    };
+    return themeConfigs[theme] || themeConfigs.default;
+  }
+  /**
+   * 生成统计信息
+   */
+  generateStatistics(data) {
+    const { entities, relations } = data;
+    const stats = {
+      entityCount: entities.length,
+      relationCount: relations.length,
+      fieldCount: entities.reduce((total, entity) => total + entity.fields.length, 0),
+      relationTypes: {}
+    };
+    relations.forEach((relation) => {
+      const type = relation.type;
+      stats.relationTypes[type] = (stats.relationTypes[type] || 0) + 1;
+    });
+    return stats;
+  }
+  /**
+   * 验证生成的Mermaid代码
+   */
+  validateMermaidCode(mermaidCode) {
+    const errors = [];
+    const warnings = [];
+    if (!mermaidCode.trim().startsWith("erDiagram")) {
+      errors.push('Mermaid\u4EE3\u7801\u5FC5\u987B\u4EE5"erDiagram"\u5F00\u5934');
+    }
+    const entityMatches = mermaidCode.match(/\s+\w+\s*\{[^}]*\}/g);
+    if (!entityMatches || entityMatches.length === 0) {
+      warnings.push("\u672A\u627E\u5230\u5B9E\u4F53\u5B9A\u4E49");
+    }
+    const relationMatches = mermaidCode.match(/\s+\w+\s+\|\|--[o\|]\{?\s+\w+/g);
+    if (!relationMatches || relationMatches.length === 0) {
+      warnings.push("\u672A\u627E\u5230\u5173\u7CFB\u5B9A\u4E49");
+    }
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+}
+
+
+/***/ }),
+
+/***/ "./src/ui/test-data.ts":
+/*!*****************************!*\
+  !*** ./src/ui/test-data.ts ***!
+  \*****************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   generateTestMermaidCode: () => (/* binding */ generateTestMermaidCode),
+/* harmony export */   testERData: () => (/* binding */ testERData)
+/* harmony export */ });
+
+const testERData = {
+  entities: [
+    {
+      className: "User",
+      tableName: "user",
+      comment: "\u7528\u6237\u8868",
+      filePath: "/src/main/java/com/example/entity/User.java",
+      annotations: [
+        {
+          name: "TableName",
+          attributes: { value: "user" }
+        }
+      ],
+      fields: [
+        {
+          fieldName: "id",
+          columnName: "id",
+          javaType: "Long",
+          isPrimaryKey: true,
+          isNotNull: true,
+          isUnique: true,
+          comment: "\u7528\u6237ID"
+        },
+        {
+          fieldName: "username",
+          columnName: "username",
+          javaType: "String",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: true,
+          comment: "\u7528\u6237\u540D"
+        },
+        {
+          fieldName: "email",
+          columnName: "email",
+          javaType: "String",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: true,
+          comment: "\u90AE\u7BB1"
+        },
+        {
+          fieldName: "createTime",
+          columnName: "create_time",
+          javaType: "LocalDateTime",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u521B\u5EFA\u65F6\u95F4"
+        }
+      ]
+    },
+    {
+      className: "Order",
+      tableName: "order",
+      comment: "\u8BA2\u5355\u8868",
+      filePath: "/src/main/java/com/example/entity/Order.java",
+      annotations: [
+        {
+          name: "TableName",
+          attributes: { value: "order" }
+        }
+      ],
+      fields: [
+        {
+          fieldName: "id",
+          columnName: "id",
+          javaType: "Long",
+          isPrimaryKey: true,
+          isNotNull: true,
+          isUnique: true,
+          comment: "\u8BA2\u5355ID"
+        },
+        {
+          fieldName: "userId",
+          columnName: "user_id",
+          javaType: "Long",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u7528\u6237ID"
+        },
+        {
+          fieldName: "orderNo",
+          columnName: "order_no",
+          javaType: "String",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: true,
+          comment: "\u8BA2\u5355\u53F7"
+        },
+        {
+          fieldName: "totalAmount",
+          columnName: "total_amount",
+          javaType: "BigDecimal",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u603B\u91D1\u989D"
+        },
+        {
+          fieldName: "status",
+          columnName: "status",
+          javaType: "Integer",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u8BA2\u5355\u72B6\u6001"
+        },
+        {
+          fieldName: "createTime",
+          columnName: "create_time",
+          javaType: "LocalDateTime",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u521B\u5EFA\u65F6\u95F4"
+        }
+      ]
+    },
+    {
+      className: "OrderItem",
+      tableName: "order_item",
+      comment: "\u8BA2\u5355\u9879\u8868",
+      filePath: "/src/main/java/com/example/entity/OrderItem.java",
+      annotations: [
+        {
+          name: "TableName",
+          attributes: { value: "order_item" }
+        }
+      ],
+      fields: [
+        {
+          fieldName: "id",
+          columnName: "id",
+          javaType: "Long",
+          isPrimaryKey: true,
+          isNotNull: true,
+          isUnique: true,
+          comment: "\u8BA2\u5355\u9879ID"
+        },
+        {
+          fieldName: "orderId",
+          columnName: "order_id",
+          javaType: "Long",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u8BA2\u5355ID"
+        },
+        {
+          fieldName: "productId",
+          columnName: "product_id",
+          javaType: "Long",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u4EA7\u54C1ID"
+        },
+        {
+          fieldName: "quantity",
+          columnName: "quantity",
+          javaType: "Integer",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u6570\u91CF"
+        },
+        {
+          fieldName: "price",
+          columnName: "price",
+          javaType: "BigDecimal",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u5355\u4EF7"
+        }
+      ]
+    },
+    {
+      className: "Product",
+      tableName: "product",
+      comment: "\u4EA7\u54C1\u8868",
+      filePath: "/src/main/java/com/example/entity/Product.java",
+      annotations: [
+        {
+          name: "TableName",
+          attributes: { value: "product" }
+        }
+      ],
+      fields: [
+        {
+          fieldName: "id",
+          columnName: "id",
+          javaType: "Long",
+          isPrimaryKey: true,
+          isNotNull: true,
+          isUnique: true,
+          comment: "\u4EA7\u54C1ID"
+        },
+        {
+          fieldName: "name",
+          columnName: "name",
+          javaType: "String",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u4EA7\u54C1\u540D\u79F0"
+        },
+        {
+          fieldName: "description",
+          columnName: "description",
+          javaType: "String",
+          isPrimaryKey: false,
+          isNotNull: false,
+          isUnique: false,
+          comment: "\u4EA7\u54C1\u63CF\u8FF0"
+        },
+        {
+          fieldName: "price",
+          columnName: "price",
+          javaType: "BigDecimal",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u4EF7\u683C"
+        },
+        {
+          fieldName: "stock",
+          columnName: "stock",
+          javaType: "Integer",
+          isPrimaryKey: false,
+          isNotNull: true,
+          isUnique: false,
+          comment: "\u5E93\u5B58"
+        }
+      ]
+    }
+  ],
+  relations: [
+    {
+      fromTable: "user",
+      toTable: "order",
+      fromField: "id",
+      toField: "user_id",
+      type: "one-to-many",
+      confidence: 0.95,
+      source: "naming-convention",
+      description: "\u7528\u6237\u4E0E\u8BA2\u5355\u7684\u4E00\u5BF9\u591A\u5173\u7CFB"
+    },
+    {
+      fromTable: "order",
+      toTable: "order_item",
+      fromField: "id",
+      toField: "order_id",
+      type: "one-to-many",
+      confidence: 0.95,
+      source: "naming-convention",
+      description: "\u8BA2\u5355\u4E0E\u8BA2\u5355\u9879\u7684\u4E00\u5BF9\u591A\u5173\u7CFB"
+    },
+    {
+      fromTable: "product",
+      toTable: "order_item",
+      fromField: "id",
+      toField: "product_id",
+      type: "one-to-many",
+      confidence: 0.95,
+      source: "naming-convention",
+      description: "\u4EA7\u54C1\u4E0E\u8BA2\u5355\u9879\u7684\u4E00\u5BF9\u591A\u5173\u7CFB"
+    }
+  ]
+};
+function generateTestMermaidCode() {
+  return `erDiagram
+    USER {
+        bigint id PK NOT NULL "\u7528\u6237ID"
+        varchar username NOT NULL UNIQUE "\u7528\u6237\u540D"
+        varchar email NOT NULL UNIQUE "\u90AE\u7BB1"
+        datetime create_time NOT NULL "\u521B\u5EFA\u65F6\u95F4"
+    }
+
+    ORDER {
+        bigint id PK NOT NULL "\u8BA2\u5355ID"
+        bigint user_id NOT NULL "\u7528\u6237ID"
+        varchar order_no NOT NULL UNIQUE "\u8BA2\u5355\u53F7"
+        decimal total_amount NOT NULL "\u603B\u91D1\u989D"
+        int status NOT NULL "\u8BA2\u5355\u72B6\u6001"
+        datetime create_time NOT NULL "\u521B\u5EFA\u65F6\u95F4"
+    }
+
+    ORDER_ITEM {
+        bigint id PK NOT NULL "\u8BA2\u5355\u9879ID"
+        bigint order_id NOT NULL "\u8BA2\u5355ID"
+        bigint product_id NOT NULL "\u4EA7\u54C1ID"
+        int quantity NOT NULL "\u6570\u91CF"
+        decimal price NOT NULL "\u5355\u4EF7"
+    }
+
+    PRODUCT {
+        bigint id PK NOT NULL "\u4EA7\u54C1ID"
+        varchar name NOT NULL "\u4EA7\u54C1\u540D\u79F0"
+        varchar description "\u4EA7\u54C1\u63CF\u8FF0"
+        decimal price NOT NULL "\u4EF7\u683C"
+        int stock NOT NULL "\u5E93\u5B58"
+    }
+
+    USER ||--o{ ORDER : "id-user_id"
+    ORDER ||--o{ ORDER_ITEM : "id-order_id"
+    PRODUCT ||--o{ ORDER_ITEM : "id-product_id"`;
+}
+
+
+/***/ }),
+
+/***/ "./src/ui/webview-provider.ts":
+/*!************************************!*\
+  !*** ./src/ui/webview-provider.ts ***!
+  \************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   ERDiagramWebViewProvider: () => (/* binding */ ERDiagramWebViewProvider)
+/* harmony export */ });
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vscode */ "vscode");
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(vscode__WEBPACK_IMPORTED_MODULE_0__);
+
+
+class ERDiagramWebViewProvider {
+  constructor(_extensionUri, _context) {
+    this._extensionUri = _extensionUri;
+    this._context = _context;
+  }
+  resolveWebviewView(webviewView, context, _token) {
+    this._view = webviewView;
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        this._extensionUri
+      ]
+    };
+    webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+    webviewView.webview.onDidReceiveMessage(
+      (message) => {
+        switch (message.type) {
+          case "exportDiagram":
+            this._exportDiagram(message.format);
+            break;
+          case "refreshDiagram":
+            this._refreshDiagram();
+            break;
+          case "searchEntities":
+            this._searchEntities(message.query);
+            break;
+          case "filterRelations":
+            this._filterRelations(message.filter);
+            break;
+        }
+      },
+      void 0,
+      this._context.subscriptions
+    );
+  }
+  /**
+   * 更新ER图数据
+   */
+  updateDiagram(data) {
+    this._data = data;
+    if (this._view) {
+      this._view.webview.postMessage({
+        type: "updateDiagram",
+        data
+      });
+    }
+  }
+  /**
+   * 显示加载状态
+   */
+  showLoading(message = "\u6B63\u5728\u751F\u6210ER\u56FE...") {
+    if (this._view) {
+      this._view.webview.postMessage({
+        type: "showLoading",
+        message
+      });
+    }
+  }
+  /**
+   * 显示错误信息
+   */
+  showError(error) {
+    if (this._view) {
+      this._view.webview.postMessage({
+        type: "showError",
+        error
+      });
+    }
+  }
+  /**
+   * 导出ER图
+   */
+  async _exportDiagram(format) {
+    if (!this._data) {
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showWarningMessage("\u6CA1\u6709\u53EF\u5BFC\u51FA\u7684ER\u56FE\u6570\u636E");
+      return;
+    }
+    try {
+      const uri = await vscode__WEBPACK_IMPORTED_MODULE_0__.window.showSaveDialog({
+        defaultUri: vscode__WEBPACK_IMPORTED_MODULE_0__.Uri.file(`er-diagram.${format}`),
+        filters: {
+          [format.toUpperCase()]: [format]
+        }
+      });
+      if (uri) {
+        this._view?.webview.postMessage({
+          type: "exportToFile",
+          format,
+          path: uri.fsPath
+        });
+      }
+    } catch (error) {
+      vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage(`\u5BFC\u51FA\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 刷新ER图
+   */
+  async _refreshDiagram() {
+    try {
+      this.showLoading("\u6B63\u5728\u5237\u65B0ER\u56FE...");
+      await vscode__WEBPACK_IMPORTED_MODULE_0__.commands.executeCommand("mybatis-er.generate");
+    } catch (error) {
+      this.showError(`\u5237\u65B0\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 搜索实体
+   */
+  _searchEntities(query) {
+    if (this._view) {
+      this._view.webview.postMessage({
+        type: "searchResults",
+        query,
+        results: this._performSearch(query)
+      });
+    }
+  }
+  /**
+   * 过滤关系
+   */
+  _filterRelations(filter) {
+    if (this._view) {
+      this._view.webview.postMessage({
+        type: "filterResults",
+        filter,
+        data: this._applyFilter(filter)
+      });
+    }
+  }
+  /**
+   * 执行搜索
+   */
+  _performSearch(query) {
+    if (!this._data || !query.trim()) {
+      return [];
+    }
+    const lowerQuery = query.toLowerCase();
+    return this._data.entities.filter(
+      (entity) => entity.tableName.toLowerCase().includes(lowerQuery) || entity.className.toLowerCase().includes(lowerQuery) || entity.fields.some(
+        (field) => field.fieldName.toLowerCase().includes(lowerQuery) || field.columnName.toLowerCase().includes(lowerQuery)
+      )
+    );
+  }
+  /**
+   * 应用过滤器
+   */
+  _applyFilter(filter) {
+    if (!this._data) {
+      return { entities: [], relations: [] };
+    }
+    let filteredEntities = this._data.entities;
+    let filteredRelations = this._data.relations;
+    if (filter.entityType) {
+      filteredEntities = filteredEntities.filter(
+        (entity) => entity.annotations.some((ann) => ann.name === filter.entityType)
+      );
+    }
+    if (filter.relationType) {
+      filteredRelations = filteredRelations.filter(
+        (relation) => relation.type === filter.relationType
+      );
+    }
+    return {
+      entities: filteredEntities,
+      relations: filteredRelations
+    };
+  }
+  /**
+   * 生成WebView的HTML内容
+   */
+  _getHtmlForWebview(webview) {
+    const scriptUri = webview.asWebviewUri(vscode__WEBPACK_IMPORTED_MODULE_0__.Uri.joinPath(this._extensionUri, "media", "main.js"));
+    const mermaidLoaderUri = webview.asWebviewUri(vscode__WEBPACK_IMPORTED_MODULE_0__.Uri.joinPath(this._extensionUri, "media", "mermaid-loader.js"));
+    const styleResetUri = webview.asWebviewUri(vscode__WEBPACK_IMPORTED_MODULE_0__.Uri.joinPath(this._extensionUri, "media", "reset.css"));
+    const styleVSCodeUri = webview.asWebviewUri(vscode__WEBPACK_IMPORTED_MODULE_0__.Uri.joinPath(this._extensionUri, "media", "vscode.css"));
+    const styleMainUri = webview.asWebviewUri(vscode__WEBPACK_IMPORTED_MODULE_0__.Uri.joinPath(this._extensionUri, "media", "main.css"));
+    const nonce = getNonce();
+    return `<!DOCTYPE html>
+            <html lang="zh-CN">
+            <head>
+                <meta charset="UTF-8">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}' 'unsafe-eval' https://cdn.jsdelivr.net; img-src ${webview.cspSource} https:; connect-src https:;">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                
+                <link href="${styleResetUri}" rel="stylesheet">
+                <link href="${styleVSCodeUri}" rel="stylesheet">
+                <link href="${styleMainUri}" rel="stylesheet">
+                
+                <title>MyBatis ER \u56FE</title>
+            </head>
+            <body>
+                <!-- \u5DE5\u5177\u680F -->
+                <div class="toolbar">
+                    <div class="toolbar-group">
+                        <button id="refreshBtn" class="toolbar-btn" title="\u5237\u65B0ER\u56FE">
+                            <span class="codicon codicon-refresh"></span>
+                            \u5237\u65B0
+                        </button>
+                        <button id="exportBtn" class="toolbar-btn" title="\u5BFC\u51FAER\u56FE">
+                            <span class="codicon codicon-export"></span>
+                            \u5BFC\u51FA
+                        </button>
+                    </div>
+                    
+                    <div class="toolbar-group">
+                        <input type="text" id="searchInput" placeholder="\u641C\u7D22\u5B9E\u4F53\u6216\u5B57\u6BB5..." class="search-input">
+                        <button id="searchBtn" class="toolbar-btn" title="\u641C\u7D22">
+                            <span class="codicon codicon-search"></span>
+                        </button>
+                    </div>
+                    
+                    <div class="toolbar-group">
+                        <select id="filterSelect" class="filter-select">
+                            <option value="">\u5168\u90E8\u5173\u7CFB</option>
+                            <option value="one-to-one">\u4E00\u5BF9\u4E00</option>
+                            <option value="one-to-many">\u4E00\u5BF9\u591A</option>
+                            <option value="many-to-one">\u591A\u5BF9\u4E00</option>
+                            <option value="many-to-many">\u591A\u5BF9\u591A</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- \u4E3B\u8981\u5185\u5BB9\u533A\u57DF -->
+                <div class="main-content">
+                    <!-- \u4FA7\u8FB9\u680F -->
+                    <div class="sidebar">
+                        <div class="sidebar-section">
+                            <h3>\u5B9E\u4F53\u5217\u8868</h3>
+                            <div id="entityList" class="entity-list"></div>
+                        </div>
+                        
+                        <div class="sidebar-section">
+                            <h3>\u5173\u7CFB\u7EDF\u8BA1</h3>
+                            <div id="relationStats" class="relation-stats"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- ER\u56FE\u753B\u5E03 -->
+                    <div class="diagram-container">
+                        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+                            <div class="loading-spinner"></div>
+                            <div class="loading-text">\u6B63\u5728\u751F\u6210ER\u56FE...</div>
+                        </div>
+                        
+                        <div id="errorIndicator" class="error-indicator" style="display: none;">
+                            <div class="error-icon">\u26A0\uFE0F</div>
+                            <div class="error-text"></div>
+                        </div>
+                        
+                        <div id="diagramCanvas" class="diagram-canvas"></div>
+                    </div>
+                </div>
+                
+                <!-- \u5BFC\u51FA\u5BF9\u8BDD\u6846 -->
+                <div id="exportModal" class="modal" style="display: none;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>\u5BFC\u51FAER\u56FE</h3>
+                            <button id="closeModal" class="close-btn">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="export-options">
+                                <label>
+                                    <input type="radio" name="exportFormat" value="png" checked>
+                                    PNG \u56FE\u7247
+                                </label>
+                                <label>
+                                    <input type="radio" name="exportFormat" value="svg">
+                                    SVG \u77E2\u91CF\u56FE
+                                </label>
+                                <label>
+                                    <input type="radio" name="exportFormat" value="pdf">
+                                    PDF \u6587\u6863
+                                </label>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button id="confirmExport" class="btn btn-primary">\u5BFC\u51FA</button>
+                            <button id="cancelExport" class="btn btn-secondary">\u53D6\u6D88</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <script nonce="${nonce}" src="${mermaidLoaderUri}"><\/script>
+                <script nonce="${nonce}" src="${scriptUri}"><\/script>
+            </body>
+            </html>`;
+  }
+}
+ERDiagramWebViewProvider.viewType = "mybatis-er.erDiagramView";
+function getNonce() {
+  let text = "";
+  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
+
+
+/***/ }),
+
+/***/ "./src/utils/config-manager.ts":
+/*!*************************************!*\
+  !*** ./src/utils/config-manager.ts ***!
+  \*************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   ConfigManager: () => (/* binding */ ConfigManager)
+/* harmony export */ });
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vscode */ "vscode");
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(vscode__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _logger__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./logger */ "./src/utils/logger.ts");
+
+
+
+class ConfigManager {
+  constructor() {
+    this.configChangeListeners = [];
+    vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.onDidChangeConfiguration(this.onConfigurationChanged.bind(this));
+    _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u914D\u7F6E\u7BA1\u7406\u5668\u5DF2\u521D\u59CB\u5316");
+  }
+  /**
+   * 获取配置管理器实例
+   */
+  static getInstance() {
+    if (!ConfigManager.instance) {
+      ConfigManager.instance = new ConfigManager();
+    }
+    return ConfigManager.instance;
+  }
+  /**
+   * 获取扩展配置
+   */
+  getExtensionConfig() {
+    const config = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.getConfiguration("mybatis-er");
+    return {
+      autoRefresh: config.get("autoRefresh", true),
+      inferenceStrategies: config.get("inferenceStrategies", {
+        naming: true,
+        xml: true,
+        annotation: true,
+        semantic: true
+      }),
+      theme: config.get("theme", "auto"),
+      exportFormat: config.get("exportFormat", "png")
+    };
+  }
+  /**
+   * 更新扩展配置
+   */
+  async updateExtensionConfig(key, value, target) {
+    try {
+      const config = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.getConfiguration("mybatis-er");
+      await config.update(key, value, target || vscode__WEBPACK_IMPORTED_MODULE_0__.ConfigurationTarget.Workspace);
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info(`\u914D\u7F6E\u5DF2\u66F4\u65B0: ${key} = ${JSON.stringify(value)}`);
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error(`\u66F4\u65B0\u914D\u7F6E\u5931\u8D25: ${key}`, error);
+      throw error;
+    }
+  }
+  /**
+   * 获取工作空间配置
+   */
+  getWorkspaceConfig() {
+    return {
+      // Java相关配置
+      javaHome: this.getJavaConfig("home"),
+      javaSourcePaths: this.getJavaConfig("sourcePaths", []),
+      // 文件扫描配置
+      includePatterns: this.getFileConfig("include", ["**/*.java", "**/*.xml"]),
+      excludePatterns: this.getFileConfig("exclude", [
+        "**/node_modules/**",
+        "**/target/**",
+        "**/build/**",
+        "**/.git/**"
+      ]),
+      // 编辑器配置
+      tabSize: this.getEditorConfig("tabSize", 4),
+      insertSpaces: this.getEditorConfig("insertSpaces", true),
+      // 搜索配置
+      searchMaxResults: this.getSearchConfig("maxResults", 1e3),
+      searchTimeout: this.getSearchConfig("timeout", 1e4)
+    };
+  }
+  /**
+   * 获取Java相关配置
+   */
+  getJavaConfig(key, defaultValue) {
+    const config = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.getConfiguration("java");
+    return config.get(key, defaultValue);
+  }
+  /**
+   * 获取文件相关配置
+   */
+  getFileConfig(key, defaultValue) {
+    const config = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.getConfiguration("files");
+    return config.get(key, defaultValue);
+  }
+  /**
+   * 获取编辑器配置
+   */
+  getEditorConfig(key, defaultValue) {
+    const config = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.getConfiguration("editor");
+    return config.get(key, defaultValue);
+  }
+  /**
+   * 获取搜索配置
+   */
+  getSearchConfig(key, defaultValue) {
+    const config = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.getConfiguration("search");
+    return config.get(key, defaultValue);
+  }
+  /**
+   * 获取MyBatis特定配置
+   */
+  getMyBatisConfig() {
+    const config = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.getConfiguration("mybatis-er");
+    return {
+      // 解析配置
+      parseTimeout: config.get("parseTimeout", 3e4),
+      maxFileSize: config.get("maxFileSize", 10 * 1024 * 1024),
+      // 10MB
+      // 推断配置
+      inferenceTimeout: config.get("inferenceTimeout", 1e4),
+      minConfidence: config.get("minConfidence", 0.6),
+      // 缓存配置
+      cacheEnabled: config.get("cacheEnabled", true),
+      cacheMaxAge: config.get("cacheMaxAge", 5 * 60 * 1e3),
+      // 5分钟
+      // UI配置
+      maxEntitiesInView: config.get("maxEntitiesInView", 500),
+      animationEnabled: config.get("animationEnabled", true),
+      // 导出配置
+      exportPath: config.get("exportPath", ""),
+      exportQuality: config.get("exportQuality", 1)
+    };
+  }
+  /**
+   * 获取性能相关配置
+   */
+  getPerformanceConfig() {
+    const config = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.getConfiguration("mybatis-er");
+    return {
+      // Worker配置
+      maxWorkers: config.get("maxWorkers", Math.max(2, Math.floor((__webpack_require__(/*! os */ "os").cpus)().length / 2))),
+      workerTimeout: config.get("workerTimeout", 3e4),
+      // 内存配置
+      maxMemoryUsage: config.get("maxMemoryUsage", 100 * 1024 * 1024),
+      // 100MB
+      gcThreshold: config.get("gcThreshold", 0.8),
+      // 并发配置
+      maxConcurrentParsing: config.get("maxConcurrentParsing", 4),
+      batchSize: config.get("batchSize", 50),
+      // 调试配置
+      enableProfiling: config.get("enableProfiling", false),
+      logLevel: config.get("logLevel", "info")
+    };
+  }
+  /**
+   * 检查配置有效性
+   */
+  validateConfig() {
+    const errors = [];
+    const config = this.getExtensionConfig();
+    const myBatisConfig = this.getMyBatisConfig();
+    const performanceConfig = this.getPerformanceConfig();
+    if (typeof config.autoRefresh !== "boolean") {
+      errors.push("autoRefresh\u5FC5\u987B\u662F\u5E03\u5C14\u503C");
+    }
+    if (!["auto", "light", "dark"].includes(config.theme)) {
+      errors.push("theme\u5FC5\u987B\u662Fauto\u3001light\u6216dark\u4E4B\u4E00");
+    }
+    if (!["png", "svg", "pdf", "mermaid"].includes(config.exportFormat)) {
+      errors.push("exportFormat\u5FC5\u987B\u662Fpng\u3001svg\u3001pdf\u6216mermaid\u4E4B\u4E00");
+    }
+    const strategies = config.inferenceStrategies;
+    if (typeof strategies !== "object" || strategies === null) {
+      errors.push("inferenceStrategies\u5FC5\u987B\u662F\u5BF9\u8C61");
+    } else {
+      const requiredKeys = ["naming", "xml", "annotation", "semantic"];
+      for (const key of requiredKeys) {
+        if (typeof strategies[key] !== "boolean") {
+          errors.push(`inferenceStrategies.${key}\u5FC5\u987B\u662F\u5E03\u5C14\u503C`);
+        }
+      }
+    }
+    if (performanceConfig.maxWorkers < 1 || performanceConfig.maxWorkers > 16) {
+      errors.push("maxWorkers\u5FC5\u987B\u57281-16\u4E4B\u95F4");
+    }
+    if (myBatisConfig.minConfidence < 0 || myBatisConfig.minConfidence > 1) {
+      errors.push("minConfidence\u5FC5\u987B\u57280-1\u4E4B\u95F4");
+    }
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+  /**
+   * 重置配置为默认值
+   */
+  async resetToDefaults() {
+    try {
+      const config = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.getConfiguration("mybatis-er");
+      const keys = [
+        "autoRefresh",
+        "inferenceStrategies",
+        "theme",
+        "exportFormat",
+        "parseTimeout",
+        "maxFileSize",
+        "inferenceTimeout",
+        "minConfidence",
+        "cacheEnabled",
+        "cacheMaxAge",
+        "maxEntitiesInView",
+        "animationEnabled"
+      ];
+      for (const key of keys) {
+        await config.update(key, void 0, vscode__WEBPACK_IMPORTED_MODULE_0__.ConfigurationTarget.Workspace);
+      }
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u914D\u7F6E\u5DF2\u91CD\u7F6E\u4E3A\u9ED8\u8BA4\u503C");
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u91CD\u7F6E\u914D\u7F6E\u5931\u8D25", error);
+      throw error;
+    }
+  }
+  /**
+   * 导出配置
+   */
+  exportConfig() {
+    return {
+      extension: this.getExtensionConfig(),
+      workspace: this.getWorkspaceConfig(),
+      mybatis: this.getMyBatisConfig(),
+      performance: this.getPerformanceConfig(),
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  /**
+   * 导入配置
+   */
+  async importConfig(configData) {
+    try {
+      if (!configData.extension) {
+        throw new Error("\u65E0\u6548\u7684\u914D\u7F6E\u6570\u636E");
+      }
+      const extensionConfig = configData.extension;
+      const config = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.getConfiguration("mybatis-er");
+      for (const [key, value] of Object.entries(extensionConfig)) {
+        await config.update(key, value, vscode__WEBPACK_IMPORTED_MODULE_0__.ConfigurationTarget.Workspace);
+      }
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u914D\u7F6E\u5BFC\u5165\u6210\u529F");
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u5BFC\u5165\u914D\u7F6E\u5931\u8D25", error);
+      throw error;
+    }
+  }
+  /**
+   * 添加配置变更监听器
+   */
+  onConfigChanged(listener) {
+    this.configChangeListeners.push(listener);
+    return new vscode__WEBPACK_IMPORTED_MODULE_0__.Disposable(() => {
+      const index = this.configChangeListeners.indexOf(listener);
+      if (index >= 0) {
+        this.configChangeListeners.splice(index, 1);
+      }
+    });
+  }
+  /**
+   * 配置变更事件处理
+   */
+  onConfigurationChanged(event) {
+    if (event.affectsConfiguration("mybatis-er")) {
+      const newConfig = this.getExtensionConfig();
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u914D\u7F6E\u5DF2\u53D8\u66F4", newConfig);
+      this.configChangeListeners.forEach((listener) => {
+        try {
+          listener(newConfig);
+        } catch (error) {
+          _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u914D\u7F6E\u53D8\u66F4\u76D1\u542C\u5668\u6267\u884C\u5931\u8D25", error);
+        }
+      });
+    }
+  }
+  /**
+   * 获取配置摘要信息
+   */
+  getConfigSummary() {
+    const validation = this.validateConfig();
+    const extensionConfig = this.getExtensionConfig();
+    const performanceConfig = this.getPerformanceConfig();
+    return {
+      valid: validation.valid,
+      errors: validation.errors,
+      autoRefresh: extensionConfig.autoRefresh,
+      enabledStrategies: Object.entries(extensionConfig.inferenceStrategies).filter(([_, enabled]) => enabled).map(([strategy, _]) => strategy),
+      theme: extensionConfig.theme,
+      maxWorkers: performanceConfig.maxWorkers,
+      cacheEnabled: this.getMyBatisConfig().cacheEnabled
+    };
+  }
+}
+
+
+/***/ }),
+
+/***/ "./src/utils/file-scanner.ts":
+/*!***********************************!*\
+  !*** ./src/utils/file-scanner.ts ***!
+  \***********************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   FileScanner: () => (/* binding */ FileScanner)
+/* harmony export */ });
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vscode */ "vscode");
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(vscode__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! path */ "path");
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(path__WEBPACK_IMPORTED_MODULE_1__);
+/* harmony import */ var fs_promises__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! fs/promises */ "fs/promises");
+/* harmony import */ var fs_promises__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(fs_promises__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var _logger__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./logger */ "./src/utils/logger.ts");
+
+
+
+
+
+class FileScanner {
+  constructor(workspaceRoot) {
+    this.workspaceRoot = workspaceRoot || this.getWorkspaceRoot();
+    this.defaultOptions = {
+      includePatterns: ["**/*.java", "**/*.xml"],
+      excludePatterns: [
+        "**/node_modules/**",
+        "**/target/**",
+        "**/build/**",
+        "**/out/**",
+        "**/bin/**",
+        "**/.git/**",
+        "**/.vscode/**",
+        "**/.idea/**"
+      ],
+      maxFileSize: 10 * 1024 * 1024,
+      // 10MB
+      recursive: true,
+      includeTests: false,
+      parseContent: true,
+      maxDepth: 10
+    };
+  }
+  /**
+   * 扫描工作空间文件
+   */
+  async scanWorkspace(options) {
+    const startTime = Date.now();
+    const scanOptions = { ...this.defaultOptions, ...options };
+    _logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info("\u5F00\u59CB\u626B\u63CF\u5DE5\u4F5C\u7A7A\u95F4\u6587\u4EF6...");
+    try {
+      const stats = {
+        totalFiles: 0,
+        javaFileCount: 0,
+        xmlFileCount: 0,
+        entityCount: 0,
+        mapperCount: 0,
+        directoriesScanned: 0,
+        skippedFiles: 0,
+        errorFiles: 0
+      };
+      const javaFiles = [];
+      const xmlFiles = [];
+      await this.scanDirectory(
+        this.workspaceRoot,
+        scanOptions,
+        javaFiles,
+        xmlFiles,
+        stats,
+        0
+      );
+      if (scanOptions.parseContent) {
+        await this.parseFileContents(javaFiles, xmlFiles, stats);
+      }
+      const scanTime = Date.now() - startTime;
+      _logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`\u6587\u4EF6\u626B\u63CF\u5B8C\u6210: ${stats.totalFiles}\u4E2A\u6587\u4EF6, \u8017\u65F6${scanTime}ms`);
+      return {
+        javaFiles,
+        xmlFiles,
+        stats,
+        scanTime
+      };
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_3__.Logger.error(`\u6587\u4EF6\u626B\u63CF\u5931\u8D25: ${error}`);
+      throw error;
+    }
+  }
+  /**
+   * 扫描指定目录
+   */
+  async scanDirectory(dirPath, options, javaFiles, xmlFiles, stats, depth) {
+    if (depth > options.maxDepth) {
+      return;
+    }
+    try {
+      const entries = await fs_promises__WEBPACK_IMPORTED_MODULE_2__.readdir(dirPath, { withFileTypes: true });
+      stats.directoriesScanned++;
+      for (const entry of entries) {
+        const fullPath = path__WEBPACK_IMPORTED_MODULE_1__.join(dirPath, entry.name);
+        const relativePath = path__WEBPACK_IMPORTED_MODULE_1__.relative(this.workspaceRoot, fullPath);
+        if (this.shouldExclude(relativePath, options.excludePatterns)) {
+          stats.skippedFiles++;
+          continue;
+        }
+        if (entry.isDirectory()) {
+          if (options.recursive) {
+            await this.scanDirectory(
+              fullPath,
+              options,
+              javaFiles,
+              xmlFiles,
+              stats,
+              depth + 1
+            );
+          }
+        } else if (entry.isFile()) {
+          await this.processFile(
+            fullPath,
+            relativePath,
+            options,
+            javaFiles,
+            xmlFiles,
+            stats
+          );
+        }
+      }
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`\u626B\u63CF\u76EE\u5F55\u5931\u8D25 ${dirPath}: ${error}`);
+      stats.errorFiles++;
+    }
+  }
+  /**
+   * 处理单个文件
+   */
+  async processFile(filePath, relativePath, options, javaFiles, xmlFiles, stats) {
+    try {
+      const fileName = path__WEBPACK_IMPORTED_MODULE_1__.basename(filePath);
+      const ext = path__WEBPACK_IMPORTED_MODULE_1__.extname(fileName).toLowerCase();
+      if (ext !== ".java" && ext !== ".xml") {
+        return;
+      }
+      if (!options.includeTests && this.isTestFile(relativePath)) {
+        stats.skippedFiles++;
+        return;
+      }
+      const fileStat = await fs_promises__WEBPACK_IMPORTED_MODULE_2__.stat(filePath);
+      if (fileStat.size > options.maxFileSize) {
+        _logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`\u6587\u4EF6\u8FC7\u5927\uFF0C\u8DF3\u8FC7: ${relativePath} (${fileStat.size} bytes)`);
+        stats.skippedFiles++;
+        return;
+      }
+      const fileInfo = {
+        filePath,
+        relativePath,
+        fileName,
+        size: fileStat.size,
+        lastModified: fileStat.mtime.getTime(),
+        fileType: ext === ".java" ? "java" : "xml"
+      };
+      if (ext === ".java") {
+        javaFiles.push(fileInfo);
+        stats.javaFileCount++;
+      } else if (ext === ".xml") {
+        xmlFiles.push(fileInfo);
+        stats.xmlFileCount++;
+      }
+      stats.totalFiles++;
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`\u5904\u7406\u6587\u4EF6\u5931\u8D25 ${filePath}: ${error}`);
+      stats.errorFiles++;
+    }
+  }
+  /**
+   * 解析文件内容
+   */
+  async parseFileContents(javaFiles, xmlFiles, stats) {
+    _logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info("\u5F00\u59CB\u89E3\u6790\u6587\u4EF6\u5185\u5BB9...");
+    for (const fileInfo of javaFiles) {
+      try {
+        await this.parseJavaFile(fileInfo);
+        if (fileInfo.isEntity) {
+          stats.entityCount++;
+        }
+      } catch (error) {
+        _logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`\u89E3\u6790Java\u6587\u4EF6\u5931\u8D25 ${fileInfo.relativePath}: ${error}`);
+        stats.errorFiles++;
+      }
+    }
+    for (const fileInfo of xmlFiles) {
+      try {
+        await this.parseXmlFile(fileInfo);
+        if (fileInfo.isMapper) {
+          stats.mapperCount++;
+        }
+      } catch (error) {
+        _logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`\u89E3\u6790XML\u6587\u4EF6\u5931\u8D25 ${fileInfo.relativePath}: ${error}`);
+        stats.errorFiles++;
+      }
+    }
+  }
+  /**
+   * 解析Java文件
+   */
+  async parseJavaFile(fileInfo) {
+    try {
+      const content = await fs_promises__WEBPACK_IMPORTED_MODULE_2__.readFile(fileInfo.filePath, "utf-8");
+      const packageMatch = content.match(/package\s+([\w.]+)\s*;/);
+      if (packageMatch) {
+        fileInfo.packageName = packageMatch[1];
+      }
+      fileInfo.isEntity = this.isEntityClass(content, fileInfo.fileName);
+    } catch (error) {
+      throw new Error(`\u8BFB\u53D6Java\u6587\u4EF6\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 解析XML文件
+   */
+  async parseXmlFile(fileInfo) {
+    try {
+      const content = await fs_promises__WEBPACK_IMPORTED_MODULE_2__.readFile(fileInfo.filePath, "utf-8");
+      const namespaceMatch = content.match(/namespace\s*=\s*["']([^"']+)["']/);
+      if (namespaceMatch) {
+        fileInfo.namespace = namespaceMatch[1];
+      }
+      fileInfo.isMapper = this.isMapperFile(content, fileInfo.fileName);
+    } catch (error) {
+      throw new Error(`\u8BFB\u53D6XML\u6587\u4EF6\u5931\u8D25: ${error}`);
+    }
+  }
+  /**
+   * 检查是否为实体类
+   */
+  isEntityClass(content, fileName) {
+    const entityAnnotations = [
+      "@Entity",
+      "@Table",
+      "@TableName",
+      "@Data",
+      "@Component"
+    ];
+    for (const annotation of entityAnnotations) {
+      if (content.includes(annotation)) {
+        return true;
+      }
+    }
+    const entityPatterns = [
+      /Entity\.java$/,
+      /Model\.java$/,
+      /DO\.java$/,
+      /PO\.java$/,
+      /VO\.java$/,
+      /DTO\.java$/
+    ];
+    for (const pattern of entityPatterns) {
+      if (pattern.test(fileName)) {
+        return true;
+      }
+    }
+    const classMatch = content.match(/public\s+class\s+(\w+)/);
+    if (classMatch) {
+      const className = classMatch[1];
+      const hasGetters = /public\s+\w+\s+get\w+\s*\(/.test(content);
+      const hasSetters = /public\s+void\s+set\w+\s*\(/.test(content);
+      if (hasGetters && hasSetters) {
+        return true;
+      }
+    }
+    return false;
+  }
+  /**
+   * 检查是否为Mapper文件
+   */
+  isMapperFile(content, fileName) {
+    if (fileName.toLowerCase().includes("mapper")) {
+      return true;
+    }
+    const mapperElements = [
+      "<mapper",
+      "<select",
+      "<insert",
+      "<update",
+      "<delete",
+      "<resultMap"
+    ];
+    for (const element of mapperElements) {
+      if (content.includes(element)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  /**
+   * 检查是否为测试文件
+   */
+  isTestFile(filePath) {
+    const testPatterns = [
+      /\/test\//,
+      /\/tests\//,
+      /Test\.java$/,
+      /Tests\.java$/,
+      /TestCase\.java$/,
+      /_test\.java$/,
+      /_tests\.java$/
+    ];
+    return testPatterns.some((pattern) => pattern.test(filePath));
+  }
+  /**
+   * 检查是否应该排除文件
+   */
+  shouldExclude(filePath, excludePatterns) {
+    return excludePatterns.some((pattern) => {
+      const regex = new RegExp(
+        pattern.replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]")
+      );
+      return regex.test(filePath);
+    });
+  }
+  /**
+   * 获取工作空间根目录
+   */
+  getWorkspaceRoot() {
+    const workspaceFolders = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+      throw new Error("\u6CA1\u6709\u6253\u5F00\u7684\u5DE5\u4F5C\u7A7A\u95F4");
+    }
+    return workspaceFolders[0].uri.fsPath;
+  }
+  /**
+   * 监听文件变化
+   */
+  createFileWatcher(callback) {
+    const watcher = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.createFileSystemWatcher(
+      new vscode__WEBPACK_IMPORTED_MODULE_0__.RelativePattern(this.workspaceRoot, "**/*.{java,xml}")
+    );
+    const disposables = [
+      watcher.onDidCreate((uri) => callback("created", uri.fsPath)),
+      watcher.onDidChange((uri) => callback("changed", uri.fsPath)),
+      watcher.onDidDelete((uri) => callback("deleted", uri.fsPath)),
+      watcher
+    ];
+    return vscode__WEBPACK_IMPORTED_MODULE_0__.Disposable.from(...disposables);
+  }
+  /**
+   * 获取文件内容
+   */
+  async getFileContent(filePath) {
+    try {
+      return await fs_promises__WEBPACK_IMPORTED_MODULE_2__.readFile(filePath, "utf-8");
+    } catch (error) {
+      throw new Error(`\u8BFB\u53D6\u6587\u4EF6\u5931\u8D25 ${filePath}: ${error}`);
+    }
+  }
+  /**
+   * 检查文件是否存在
+   */
+  async fileExists(filePath) {
+    try {
+      await fs_promises__WEBPACK_IMPORTED_MODULE_2__.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  /**
+   * 获取文件统计信息
+   */
+  async getFileStats(filePath) {
+    return await fs_promises__WEBPACK_IMPORTED_MODULE_2__.stat(filePath);
+  }
+  /**
+   * 批量获取文件内容
+   */
+  async getFileContents(filePaths) {
+    const contents = /* @__PURE__ */ new Map();
+    const promises = filePaths.map(async (filePath) => {
+      try {
+        const content = await this.getFileContent(filePath);
+        contents.set(filePath, content);
+      } catch (error) {
+        _logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`\u8BFB\u53D6\u6587\u4EF6\u5931\u8D25 ${filePath}: ${error}`);
+      }
+    });
+    await Promise.all(promises);
+    return contents;
+  }
+  /**
+   * 过滤文件列表
+   */
+  filterFiles(files, filter) {
+    return files.filter((file) => {
+      if (filter.fileType && file.fileType !== filter.fileType) {
+        return false;
+      }
+      if (filter.isEntity !== void 0 && file.isEntity !== filter.isEntity) {
+        return false;
+      }
+      if (filter.isMapper !== void 0 && file.isMapper !== filter.isMapper) {
+        return false;
+      }
+      if (filter.packageName && file.packageName !== filter.packageName) {
+        return false;
+      }
+      if (filter.namespace && file.namespace !== filter.namespace) {
+        return false;
+      }
+      if (filter.minSize && file.size < filter.minSize) {
+        return false;
+      }
+      if (filter.maxSize && file.size > filter.maxSize) {
+        return false;
+      }
+      if (filter.modifiedAfter && file.lastModified < filter.modifiedAfter) {
+        return false;
+      }
+      return true;
+    });
+  }
+}
+
+
+/***/ }),
+
+/***/ "./src/utils/logger.ts":
+/*!*****************************!*\
+  !*** ./src/utils/logger.ts ***!
+  \*****************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   Logger: () => (/* binding */ Logger)
+/* harmony export */ });
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vscode */ "vscode");
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(vscode__WEBPACK_IMPORTED_MODULE_0__);
+
+
+class Logger {
+  /**
+   * 初始化日志管理器
+   */
+  static initialize() {
+    this.outputChannel = vscode__WEBPACK_IMPORTED_MODULE_0__.window.createOutputChannel("MyBatis ER Generator");
+  }
+  /**
+   * 信息日志
+   */
+  static info(message, ...args) {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    const logMessage = `[${timestamp}] INFO: ${message}`;
+    console.log(logMessage, ...args);
+    this.outputChannel?.appendLine(logMessage);
+  }
+  /**
+   * 警告日志
+   */
+  static warn(message, ...args) {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    const logMessage = `[${timestamp}] WARN: ${message}`;
+    console.warn(logMessage, ...args);
+    this.outputChannel?.appendLine(logMessage);
+  }
+  /**
+   * 错误日志
+   */
+  static error(message, error, ...args) {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    const logMessage = `[${timestamp}] ERROR: ${message}`;
+    const errorDetails = error ? `
+${error.stack}` : "";
+    console.error(logMessage, error, ...args);
+    this.outputChannel?.appendLine(logMessage + errorDetails);
+  }
+  /**
+   * 调试日志
+   */
+  static debug(message, ...args) {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    const logMessage = `[${timestamp}] DEBUG: ${message}`;
+    console.debug(logMessage, ...args);
+    this.outputChannel?.appendLine(logMessage);
+  }
+  /**
+   * 显示输出面板
+   */
+  static show() {
+    this.outputChannel?.show();
+  }
+  /**
+   * 清空日志
+   */
+  static clear() {
+    this.outputChannel?.clear();
+  }
+  /**
+   * 销毁日志管理器
+   */
+  static dispose() {
+    this.outputChannel?.dispose();
+  }
+}
+
+
+/***/ }),
+
+/***/ "./src/utils/performance-tester.ts":
+/*!*****************************************!*\
+  !*** ./src/utils/performance-tester.ts ***!
+  \*****************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   PerformanceTest: () => (/* binding */ PerformanceTest),
+/* harmony export */   PerformanceTester: () => (/* binding */ PerformanceTester)
+/* harmony export */ });
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vscode */ "vscode");
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(vscode__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _logger__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./logger */ "./src/utils/logger.ts");
+
+
+
+class PerformanceTester {
+  constructor() {
+    this.testResults = /* @__PURE__ */ new Map();
+  }
+  static getInstance() {
+    if (!PerformanceTester.instance) {
+      PerformanceTester.instance = new PerformanceTester();
+    }
+    return PerformanceTester.instance;
+  }
+  /**
+   * 开始性能测试
+   */
+  startTest(testName) {
+    const test = new PerformanceTest(testName);
+    _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info(`\u5F00\u59CB\u6027\u80FD\u6D4B\u8BD5: ${testName}`);
+    return test;
+  }
+  /**
+   * 记录测试结果
+   */
+  recordResult(result) {
+    this.testResults.set(result.testName, result);
+    _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info(`\u6027\u80FD\u6D4B\u8BD5\u5B8C\u6210: ${result.testName}`, {
+      duration: result.duration,
+      memoryUsed: result.memoryUsed,
+      itemsProcessed: result.itemsProcessed
+    });
+  }
+  /**
+   * 获取测试报告
+   */
+  getTestReport() {
+    const results = Array.from(this.testResults.values());
+    return {
+      totalTests: results.length,
+      results,
+      summary: {
+        totalDuration: results.reduce((sum, r) => sum + r.duration, 0),
+        averageDuration: results.length > 0 ? results.reduce((sum, r) => sum + r.duration, 0) / results.length : 0,
+        maxMemoryUsed: Math.max(...results.map((r) => r.memoryUsed)),
+        totalItemsProcessed: results.reduce((sum, r) => sum + r.itemsProcessed, 0)
+      }
+    };
+  }
+  /**
+   * 显示性能报告
+   */
+  async showPerformanceReport() {
+    const report = this.getTestReport();
+    const message = `
+\u6027\u80FD\u6D4B\u8BD5\u62A5\u544A\uFF1A
+
+\u603B\u6D4B\u8BD5\u6570: ${report.totalTests}
+\u603B\u8017\u65F6: ${report.summary.totalDuration.toFixed(2)}ms
+\u5E73\u5747\u8017\u65F6: ${report.summary.averageDuration.toFixed(2)}ms
+\u6700\u5927\u5185\u5B58\u4F7F\u7528: ${(report.summary.maxMemoryUsed / 1024 / 1024).toFixed(2)}MB
+\u603B\u5904\u7406\u9879\u76EE: ${report.summary.totalItemsProcessed}
+
+\u8BE6\u7EC6\u7ED3\u679C:
+${report.results.map(
+      (r) => `- ${r.testName}: ${r.duration.toFixed(2)}ms, ${(r.memoryUsed / 1024 / 1024).toFixed(2)}MB, ${r.itemsProcessed}\u9879`
+    ).join("\n")}
+        `.trim();
+    await vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage(message, { modal: true });
+  }
+  /**
+   * 清除测试结果
+   */
+  clearResults() {
+    this.testResults.clear();
+    _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u6027\u80FD\u6D4B\u8BD5\u7ED3\u679C\u5DF2\u6E05\u9664");
+  }
+  /**
+   * 运行基准测试套件
+   */
+  async runBenchmarkSuite() {
+    _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u5F00\u59CB\u8FD0\u884C\u57FA\u51C6\u6D4B\u8BD5\u5957\u4EF6");
+    this.clearResults();
+    const memoryTest = this.startTest("\u5185\u5B58\u4F7F\u7528\u57FA\u51C6");
+    await this.simulateMemoryUsage();
+    memoryTest.finish(100);
+    const parseTest = this.startTest("\u89E3\u6790\u901F\u5EA6\u57FA\u51C6");
+    await this.simulateParsingLoad();
+    parseTest.finish(500);
+    const inferenceTest = this.startTest("\u5173\u7CFB\u63A8\u65AD\u57FA\u51C6");
+    await this.simulateInferenceLoad();
+    inferenceTest.finish(200);
+    const report = this.getTestReport();
+    _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u57FA\u51C6\u6D4B\u8BD5\u5957\u4EF6\u5B8C\u6210", report.summary);
+    return report;
+  }
+  /**
+   * 模拟内存使用测试
+   */
+  async simulateMemoryUsage() {
+    const objects = [];
+    for (let i = 0; i < 1e4; i++) {
+      objects.push({
+        id: i,
+        name: `Entity_${i}`,
+        fields: Array.from({ length: 10 }, (_, j) => ({
+          name: `field_${j}`,
+          type: "String",
+          value: `value_${i}_${j}`
+        }))
+      });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    objects.length = 0;
+  }
+  /**
+   * 模拟解析负载测试
+   */
+  async simulateParsingLoad() {
+    for (let i = 0; i < 500; i++) {
+      const content = `
+                @Entity
+                @Table(name = "entity_${i}")
+                public class Entity${i} {
+                    @Id
+                    private Long id;
+                    
+                    @Column(name = "name")
+                    private String name;
+                    
+                    // \u6A21\u62DF\u590D\u6742\u89E3\u6790
+                    ${Array.from(
+        { length: 10 },
+        (_, j) => `@Column(name = "field_${j}") private String field${j};`
+      ).join("\n")}
+                }
+            `;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+  }
+  /**
+   * 模拟关系推断负载测试
+   */
+  async simulateInferenceLoad() {
+    for (let i = 0; i < 200; i++) {
+      const entities = Array.from({ length: 50 }, (_, j) => ({
+        name: `Entity${j}`,
+        fields: [`id`, `name`, `entity${i}_id`]
+      }));
+      for (const entity of entities) {
+        for (const field of entity.fields) {
+          if (field.endsWith("_id")) {
+            const confidence = Math.random();
+            if (confidence > 0.8) {
+            }
+          }
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+  }
+}
+class PerformanceTest {
+  constructor(testName) {
+    this.testName = testName;
+    this.startTime = performance.now();
+    this.startMemory = this.getMemoryUsage();
+  }
+  /**
+   * 完成测试并记录结果
+   */
+  finish(itemsProcessed = 0) {
+    const endTime = performance.now();
+    const endMemory = this.getMemoryUsage();
+    const result = {
+      testName: this.testName,
+      duration: endTime - this.startTime,
+      memoryUsed: endMemory - this.startMemory,
+      itemsProcessed,
+      timestamp: /* @__PURE__ */ new Date()
+    };
+    PerformanceTester.getInstance().recordResult(result);
+    return result;
+  }
+  /**
+   * 获取当前内存使用量
+   */
+  getMemoryUsage() {
+    if (process.memoryUsage) {
+      return process.memoryUsage().heapUsed;
+    }
+    return 0;
+  }
+}
+
+
+/***/ }),
+
+/***/ "./src/utils/state-manager.ts":
+/*!************************************!*\
+  !*** ./src/utils/state-manager.ts ***!
+  \************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   StateManager: () => (/* binding */ StateManager)
+/* harmony export */ });
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vscode */ "vscode");
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(vscode__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _logger__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./logger */ "./src/utils/logger.ts");
+
+
+
+const _StateManager = class _StateManager {
+  constructor(context) {
+    this.context = context;
+    this.workspaceState = context.workspaceState;
+    this.globalState = context.globalState;
+    _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u72B6\u6001\u7BA1\u7406\u5668\u5DF2\u521D\u59CB\u5316");
+  }
+  /**
+   * 初始化状态管理器
+   */
+  static initialize(context) {
+    if (!_StateManager.instance) {
+      _StateManager.instance = new _StateManager(context);
+    }
+    return _StateManager.instance;
+  }
+  /**
+   * 获取状态管理器实例
+   */
+  static getInstance() {
+    if (!_StateManager.instance) {
+      throw new Error("StateManager\u672A\u521D\u59CB\u5316\uFF0C\u8BF7\u5148\u8C03\u7528initialize()");
+    }
+    return _StateManager.instance;
+  }
+  // ==================== ER图数据管理 ====================
+  /**
+   * 保存ER图数据
+   */
+  async saveERDiagramData(data) {
+    try {
+      await this.workspaceState.update(_StateManager.KEYS.ER_DIAGRAM_DATA, {
+        ...data,
+        generatedAt: data.generatedAt.toISOString()
+      });
+      await this.workspaceState.update(_StateManager.KEYS.LAST_SCAN_TIME, Date.now());
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info(`ER\u56FE\u6570\u636E\u5DF2\u4FDD\u5B58\uFF0C\u5305\u542B${data.entities.length}\u4E2A\u5B9E\u4F53\uFF0C${data.relations.length}\u4E2A\u5173\u7CFB`);
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u4FDD\u5B58ER\u56FE\u6570\u636E\u5931\u8D25", error);
+      throw error;
+    }
+  }
+  /**
+   * 获取ER图数据
+   */
+  async getERDiagramData() {
+    try {
+      const data = this.workspaceState.get(_StateManager.KEYS.ER_DIAGRAM_DATA);
+      if (!data) {
+        return void 0;
+      }
+      return {
+        ...data,
+        generatedAt: new Date(data.generatedAt)
+      };
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u83B7\u53D6ER\u56FE\u6570\u636E\u5931\u8D25", error);
+      return void 0;
+    }
+  }
+  /**
+   * 清除ER图数据
+   */
+  async clearERDiagramData() {
+    try {
+      await this.workspaceState.update(_StateManager.KEYS.ER_DIAGRAM_DATA, void 0);
+      await this.workspaceState.update(_StateManager.KEYS.LAST_SCAN_TIME, void 0);
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("ER\u56FE\u6570\u636E\u5DF2\u6E05\u9664");
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u6E05\u9664ER\u56FE\u6570\u636E\u5931\u8D25", error);
+      throw error;
+    }
+  }
+  // ==================== 项目配置管理 ====================
+  /**
+   * 保存项目配置
+   */
+  async saveProjectConfig(config) {
+    try {
+      const currentConfig = await this.getProjectConfig();
+      const newConfig = { ...currentConfig, ...config };
+      await this.workspaceState.update(_StateManager.KEYS.PROJECT_CONFIG, newConfig);
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u9879\u76EE\u914D\u7F6E\u5DF2\u4FDD\u5B58", newConfig);
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u4FDD\u5B58\u9879\u76EE\u914D\u7F6E\u5931\u8D25", error);
+      throw error;
+    }
+  }
+  /**
+   * 获取项目配置
+   */
+  async getProjectConfig() {
+    try {
+      const config = this.workspaceState.get(_StateManager.KEYS.PROJECT_CONFIG);
+      return {
+        autoRefresh: true,
+        includeTestFiles: false,
+        inferenceStrategies: {
+          naming: true,
+          xml: true,
+          annotation: true,
+          semantic: true
+        },
+        theme: "auto",
+        exportFormat: "png",
+        ...config
+      };
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u83B7\u53D6\u9879\u76EE\u914D\u7F6E\u5931\u8D25", error);
+      return {
+        autoRefresh: true,
+        includeTestFiles: false,
+        inferenceStrategies: {
+          naming: true,
+          xml: true,
+          annotation: true,
+          semantic: true
+        },
+        theme: "auto",
+        exportFormat: "png"
+      };
+    }
+  }
+  // ==================== 缓存管理 ====================
+  /**
+   * 获取最后扫描时间
+   */
+  getLastScanTime() {
+    return this.workspaceState.get(_StateManager.KEYS.LAST_SCAN_TIME);
+  }
+  /**
+   * 检查缓存是否有效
+   */
+  isCacheValid(maxAge = 5 * 60 * 1e3) {
+    const lastScanTime = this.getLastScanTime();
+    if (!lastScanTime) {
+      return false;
+    }
+    return Date.now() - lastScanTime < maxAge;
+  }
+  /**
+   * 保存实体缓存
+   */
+  async saveEntityCache(filePath, entityData) {
+    try {
+      const cache = this.workspaceState.get(_StateManager.KEYS.WORKSPACE_ENTITIES) || {};
+      cache[filePath] = {
+        data: entityData,
+        timestamp: Date.now()
+      };
+      await this.workspaceState.update(_StateManager.KEYS.WORKSPACE_ENTITIES, cache);
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u4FDD\u5B58\u5B9E\u4F53\u7F13\u5B58\u5931\u8D25", error);
+    }
+  }
+  /**
+   * 获取实体缓存
+   */
+  getEntityCache(filePath) {
+    try {
+      const cache = this.workspaceState.get(_StateManager.KEYS.WORKSPACE_ENTITIES) || {};
+      const entityCache = cache[filePath];
+      if (!entityCache) {
+        return void 0;
+      }
+      if (Date.now() - entityCache.timestamp > 5 * 60 * 1e3) {
+        return void 0;
+      }
+      return entityCache.data;
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u83B7\u53D6\u5B9E\u4F53\u7F13\u5B58\u5931\u8D25", error);
+      return void 0;
+    }
+  }
+  /**
+   * 清除过期缓存
+   */
+  async cleanExpiredCache() {
+    try {
+      const cache = this.workspaceState.get(_StateManager.KEYS.WORKSPACE_ENTITIES) || {};
+      const now = Date.now();
+      const maxAge = 5 * 60 * 1e3;
+      const cleanedCache = {};
+      let removedCount = 0;
+      for (const [filePath, entityCache] of Object.entries(cache)) {
+        if (now - entityCache.timestamp <= maxAge) {
+          cleanedCache[filePath] = entityCache;
+        } else {
+          removedCount++;
+        }
+      }
+      if (removedCount > 0) {
+        await this.workspaceState.update(_StateManager.KEYS.WORKSPACE_ENTITIES, cleanedCache);
+        _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info(`\u6E05\u9664\u4E86${removedCount}\u4E2A\u8FC7\u671F\u7F13\u5B58\u9879`);
+      }
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u6E05\u9664\u8FC7\u671F\u7F13\u5B58\u5931\u8D25", error);
+    }
+  }
+  // ==================== 工作空间状态 ====================
+  /**
+   * 获取当前工作空间路径
+   */
+  getCurrentWorkspacePath() {
+    const workspaceFolders = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.workspaceFolders;
+    return workspaceFolders?.[0]?.uri.fsPath;
+  }
+  /**
+   * 检查是否为MyBatis项目
+   */
+  async isMyBatisProject() {
+    const workspacePath = this.getCurrentWorkspacePath();
+    if (!workspacePath) {
+      return false;
+    }
+    try {
+      const files = await vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.findFiles(
+        "**/{*.xml,pom.xml,build.gradle,application.yml,application.properties}",
+        "**/node_modules/**",
+        10
+      );
+      const gitignoreFile = await vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.findFiles(".gitignore");
+      if (gitignoreFile.length > 0) {
+        const gitignoreContent = await vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.fs.readFile(gitignoreFile[0]);
+        const gitignoreText = Buffer.from(gitignoreContent).toString("utf8");
+        const gitignorePatterns = gitignoreText.split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
+        const filteredFiles = files.filter((file) => {
+          const relativePath = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.asRelativePath(file);
+          return !gitignorePatterns.some((pattern) => {
+            if (pattern.includes("*")) {
+              const regex = new RegExp(pattern.replace(/\*/g, ".*"));
+              return regex.test(relativePath);
+            }
+            return relativePath.includes(pattern);
+          });
+        });
+        files.splice(0, files.length, ...filteredFiles);
+      }
+      for (const file of files) {
+        const content = await vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.fs.readFile(file);
+        const text = Buffer.from(content).toString("utf8");
+        if (text.includes("mybatis") || text.includes("MyBatis") || text.includes("mybatis-plus") || text.includes("com.baomidou")) {
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u68C0\u67E5MyBatis\u9879\u76EE\u5931\u8D25", error);
+      return false;
+    }
+  }
+  // ==================== 全局设置 ====================
+  /**
+   * 保存全局设置
+   */
+  async saveGlobalSetting(key, value) {
+    try {
+      await this.globalState.update(key, value);
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.debug(`\u5168\u5C40\u8BBE\u7F6E\u5DF2\u4FDD\u5B58: ${key}`);
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u4FDD\u5B58\u5168\u5C40\u8BBE\u7F6E\u5931\u8D25", error);
+      throw error;
+    }
+  }
+  getGlobalSetting(key, defaultValue) {
+    if (defaultValue !== void 0) {
+      return this.globalState.get(key, defaultValue);
+    }
+    return this.globalState.get(key);
+  }
+  // ==================== 状态重置 ====================
+  /**
+   * 重置工作空间状态
+   */
+  async resetWorkspaceState() {
+    try {
+      const keys = Object.values(_StateManager.KEYS);
+      for (const key of keys) {
+        await this.workspaceState.update(key, void 0);
+      }
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u5DE5\u4F5C\u7A7A\u95F4\u72B6\u6001\u5DF2\u91CD\u7F6E");
+    } catch (error) {
+      _logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("\u91CD\u7F6E\u5DE5\u4F5C\u7A7A\u95F4\u72B6\u6001\u5931\u8D25", error);
+      throw error;
+    }
+  }
+  /**
+   * 获取状态统计信息
+   */
+  getStateStats() {
+    const lastScanTime = this.getLastScanTime();
+    const workspacePath = this.getCurrentWorkspacePath();
+    return {
+      workspacePath,
+      lastScanTime: lastScanTime ? new Date(lastScanTime).toISOString() : null,
+      cacheValid: this.isCacheValid(),
+      hasERData: !!this.workspaceState.get(_StateManager.KEYS.ER_DIAGRAM_DATA)
+    };
+  }
+};
+// 状态键常量
+_StateManager.KEYS = {
+  ER_DIAGRAM_DATA: "erDiagramData",
+  LAST_SCAN_TIME: "lastScanTime",
+  PROJECT_CONFIG: "projectConfig",
+  CACHE_VERSION: "cacheVersion",
+  WORKSPACE_ENTITIES: "workspaceEntities",
+  INFERENCE_CACHE: "inferenceCache"
+};
+let StateManager = _StateManager;
+
+
+/***/ }),
+
+/***/ "./src/workers/worker-manager.ts":
+/*!***************************************!*\
+  !*** ./src/workers/worker-manager.ts ***!
+  \***************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   WorkerManager: () => (/* binding */ WorkerManager)
+/* harmony export */ });
+/* harmony import */ var worker_threads__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! worker_threads */ "worker_threads");
+/* harmony import */ var worker_threads__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(worker_threads__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! path */ "path");
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(path__WEBPACK_IMPORTED_MODULE_1__);
+/* harmony import */ var events__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! events */ "events");
+/* harmony import */ var events__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(events__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var _utils_logger__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ../utils/logger */ "./src/utils/logger.ts");
+/* harmony import */ var _types_worker_types__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ../types/worker-types */ "./src/types/worker-types.ts");
+
+
+
+
+
+
+class WorkerManager extends events__WEBPACK_IMPORTED_MODULE_2__.EventEmitter {
+  constructor(config = {}) {
+    super();
+    this.workers = /* @__PURE__ */ new Map();
+    this.workerInfos = /* @__PURE__ */ new Map();
+    this.taskQueue = [];
+    this.activeTasks = /* @__PURE__ */ new Map();
+    this.pendingResponses = /* @__PURE__ */ new Map();
+    this.isShuttingDown = false;
+    const cpuCount = (__webpack_require__(/*! os */ "os").cpus)().length;
+    this.config = {
+      maxWorkers: Math.min(cpuCount * 2, 16),
+      // 最多CPU的两倍，但不超过16个
+      workerTimeout: 3e4,
+      // 30秒超时
+      maxQueueSize: 100,
+      // 队列最多100个任务
+      heartbeatInterval: 5e3,
+      // 5秒心跳
+      maxRetries: 3,
+      // 重试3次
+      enableProfiling: false,
+      ...config
+    };
+    this.stats = {
+      activeWorkers: 0,
+      idleWorkers: 0,
+      queuedTasks: 0,
+      processingTasks: 0,
+      totalProcessedTasks: 0,
+      averageQueueTime: 0,
+      systemLoad: 0
+    };
+    this.startHeartbeat();
+    this.startResourceMonitoring();
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`WorkerManager initialized with optimized config`, {
+      maxWorkers: this.config.maxWorkers,
+      timeout: this.config.workerTimeout,
+      queueSize: this.config.maxQueueSize
+    });
+  }
+  /**
+   * 启动Worker管理器
+   */
+  async start() {
+    if (this.isShuttingDown) {
+      throw new Error("WorkerManager is shutting down");
+    }
+    try {
+      await this.createWorker();
+      _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`WorkerManager started with 1 initial worker`);
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.error("Failed to create initial worker", error);
+      throw error;
+    }
+  }
+  /**
+   * 停止Worker管理器
+   */
+  async shutdown() {
+    this.isShuttingDown = true;
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+    if (this.resourceMonitorInterval) {
+      clearInterval(this.resourceMonitorInterval);
+    }
+    this.taskQueue = [];
+    for (const [id, pending] of this.pendingResponses) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error("WorkerManager is shutting down"));
+    }
+    this.pendingResponses.clear();
+    const terminationPromises = Array.from(this.workers.values()).map(
+      (worker) => this.terminateWorker(worker)
+    );
+    await Promise.all(terminationPromises);
+    this.workers.clear();
+    this.workerInfos.clear();
+    this.activeTasks.clear();
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info("WorkerManager shutdown completed");
+  }
+  /**
+   * 提交任务 - 优化版本，支持批量处理
+   */
+  async submitTask(type, data, options = {}) {
+    if (this.isShuttingDown) {
+      throw new Error("WorkerManager is shutting down");
+    }
+    if (this.taskQueue.length >= this.config.maxQueueSize) {
+      throw new Error("Task queue is full");
+    }
+    const task = {
+      id: this.generateTaskId(),
+      type,
+      data,
+      priority: options.priority || 5,
+      timeout: options.timeout || this.config.workerTimeout,
+      retryCount: 0,
+      maxRetries: options.maxRetries || this.config.maxRetries,
+      createdAt: Date.now()
+    };
+    return new Promise((resolve, reject) => {
+      this.addTaskToQueue(task);
+      const timeout = setTimeout(() => {
+        this.pendingResponses.delete(task.id);
+        reject(new Error(`Task ${task.id} timed out after ${task.timeout}ms`));
+      }, task.timeout);
+      this.pendingResponses.set(task.id, {
+        resolve,
+        reject,
+        timeout
+      });
+      this.processQueue();
+    });
+  }
+  /**
+   * 新增：批量提交任务
+   */
+  async submitBatchTasks(tasks) {
+    if (tasks.length === 0) {
+      return [];
+    }
+    if (tasks.length <= 10) {
+      return Promise.all(tasks.map(
+        (task) => this.submitTask(task.type, task.data, task.options)
+      ));
+    }
+    const batchSize = 5;
+    const results = [];
+    for (let i = 0; i < tasks.length; i += batchSize) {
+      const batch = tasks.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map((task) => this.submitTask(task.type, task.data, task.options))
+      );
+      results.push(...batchResults);
+      if (i + batchSize < tasks.length) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    return results;
+  }
+  /**
+   * 获取管理器统计信息
+   */
+  getStats() {
+    this.updateStats();
+    return { ...this.stats };
+  }
+  /**
+   * 获取Worker信息
+   */
+  getWorkerInfos() {
+    return Array.from(this.workerInfos.values());
+  }
+  /**
+   * 获取Worker处理状态详情 - 新增功能
+   */
+  getWorkerProcessingDetails() {
+    const details = [];
+    for (const [workerId, workerInfo] of this.workerInfos) {
+      const detail = {
+        workerId,
+        status: workerInfo.status,
+        processedTasks: workerInfo.processedTasks,
+        errorCount: workerInfo.errorCount
+      };
+      if (workerInfo.currentTaskId) {
+        const task = this.activeTasks.get(workerInfo.currentTaskId);
+        if (task) {
+          detail.currentTask = {
+            id: task.id,
+            type: task.type,
+            startedAt: task.startedAt || task.createdAt,
+            duration: Date.now() - (task.startedAt || task.createdAt),
+            description: this.getTaskDescription(task)
+          };
+        }
+      }
+      details.push(detail);
+    }
+    return details;
+  }
+  /**
+   * 获取任务描述 - 辅助方法
+   */
+  getTaskDescription(task) {
+    switch (task.type) {
+      case _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.PARSE_JAVA_FILE:
+        return `\u89E3\u6790Java\u6587\u4EF6: ${task.data?.filePath || "\u672A\u77E5\u6587\u4EF6"}`;
+      case _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.PARSE_XML_FILE:
+        return `\u89E3\u6790XML\u6587\u4EF6: ${task.data?.filePath || "\u672A\u77E5\u6587\u4EF6"}`;
+      case _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.PARSE_BATCH_FILES:
+        return `\u6279\u91CF\u89E3\u6790\u6587\u4EF6: ${task.data?.files?.length || 0}\u4E2A\u6587\u4EF6`;
+      case _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.INFER_RELATIONS:
+        return `\u63A8\u65AD\u5173\u7CFB: ${task.data?.entities?.length || 0}\u4E2A\u5B9E\u4F53`;
+      case _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.VALIDATE_RELATIONS:
+        return `\u9A8C\u8BC1\u5173\u7CFB: ${task.data?.relations?.length || 0}\u4E2A\u5173\u7CFB`;
+      case _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.GENERATE_DIAGRAM:
+        return `\u751F\u6210\u56FE\u8868: ${task.data?.entities?.length || 0}\u4E2A\u5B9E\u4F53`;
+      case _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.EXPORT_DIAGRAM:
+        return `\u5BFC\u51FA\u56FE\u8868: ${task.data?.format || "\u672A\u77E5\u683C\u5F0F"}`;
+      default:
+        return `\u6267\u884C\u4EFB\u52A1: ${task.type}`;
+    }
+  }
+  /**
+   * 输出Worker处理状态 - 新增功能
+   */
+  logWorkerProcessingStatus() {
+    const details = this.getWorkerProcessingDetails();
+    const stats = this.getStats();
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info("=== Worker\u5904\u7406\u72B6\u6001\u62A5\u544A ===");
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`\u603BWorker\u6570: ${this.workers.size}/${this.config.maxWorkers}`);
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`\u6D3B\u8DC3Worker: ${stats.activeWorkers}, \u7A7A\u95F2Worker: ${stats.idleWorkers}`);
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`\u961F\u5217\u4EFB\u52A1: ${stats.queuedTasks}, \u5904\u7406\u4E2D\u4EFB\u52A1: ${stats.processingTasks}`);
+    details.forEach((detail) => {
+      if (detail.status === _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.BUSY && detail.currentTask) {
+        const task = detail.currentTask;
+        const durationSec = Math.round(task.duration / 1e3);
+        _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`\u{1F504} Worker ${detail.workerId}: ${task.description} (${durationSec}\u79D2)`);
+      } else {
+        _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`\u{1F4A4} Worker ${detail.workerId}: ${detail.status} (\u5DF2\u5904\u7406${detail.processedTasks}\u4E2A\u4EFB\u52A1)`);
+      }
+    });
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info("========================");
+  }
+  /**
+   * 新增：获取系统健康状态
+   */
+  getHealthStatus() {
+    const issues = [];
+    const recommendations = [];
+    const stats = this.getStats();
+    const memUsage = process.memoryUsage();
+    if (memUsage.heapUsed > 50 * 1024 * 1024) {
+      issues.push("\u5185\u5B58\u4F7F\u7528\u8FC7\u9AD8");
+      recommendations.push("\u8003\u8651\u6E05\u7406\u7F13\u5B58\u6216\u51CF\u5C11\u5E76\u53D1\u4EFB\u52A1");
+    }
+    if (stats.activeWorkers > this.config.maxWorkers) {
+      issues.push("Worker\u6570\u91CF\u8D85\u9650");
+      recommendations.push("\u7B49\u5F85\u5F53\u524D\u4EFB\u52A1\u5B8C\u6210\u6216\u91CD\u542F\u6269\u5C55");
+    }
+    if (stats.queuedTasks > this.config.maxQueueSize * 0.8) {
+      issues.push("\u4EFB\u52A1\u961F\u5217\u63A5\u8FD1\u6EE1\u8F7D");
+      recommendations.push("\u51CF\u5C11\u5E76\u53D1\u64CD\u4F5C\u6216\u589E\u52A0\u5904\u7406\u80FD\u529B");
+    }
+    return {
+      healthy: issues.length === 0,
+      issues,
+      recommendations
+    };
+  }
+  /**
+   * 创建Worker - 优化版本
+   */
+  async createWorker() {
+    const workerId = this.generateWorkerId();
+    const workerPath = path__WEBPACK_IMPORTED_MODULE_1__.join(__dirname, "workers", "worker-thread.js");
+    try {
+      const worker = new worker_threads__WEBPACK_IMPORTED_MODULE_0__.Worker(workerPath, {
+        workerData: {
+          workerId,
+          config: this.config
+        }
+      });
+      this.workers.set(workerId, worker);
+      this.workerInfos.set(workerId, {
+        id: workerId,
+        status: _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.IDLE,
+        processedTasks: 0,
+        errorCount: 0,
+        createdAt: Date.now(),
+        lastActiveAt: Date.now(),
+        averageProcessingTime: 0
+      });
+      this.setupWorkerListeners(worker, workerId);
+      _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`Worker created: ${workerId}`);
+      return workerId;
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.error(`Failed to create worker: ${workerId}`, error);
+      this.workerInfos.delete(workerId);
+      throw error;
+    }
+  }
+  /**
+   * 设置Worker事件监听
+   */
+  setupWorkerListeners(worker, workerId) {
+    worker.on("message", (message) => {
+      this.handleWorkerMessage(workerId, message);
+    });
+    worker.on("error", (error) => {
+      this.handleWorkerError(workerId, error);
+    });
+    worker.on("exit", (code) => {
+      this.handleWorkerExit(workerId, code);
+    });
+  }
+  /**
+   * 处理Worker消息
+   */
+  handleWorkerMessage(workerId, message) {
+    const workerInfo = this.workerInfos.get(workerId);
+    if (!workerInfo) return;
+    workerInfo.lastActiveAt = Date.now();
+    switch (message.type) {
+      case _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.PONG:
+        break;
+      case _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.PROGRESS:
+        this.emit("progress", message.payload);
+        break;
+      case _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.ERROR:
+        this.handleTaskError(workerId, message);
+        break;
+      default:
+        if (message.isResponse && message.responseToId) {
+          this.handleTaskResponse(workerId, message);
+        }
+        break;
+    }
+  }
+  /**
+   * 处理任务响应
+   */
+  handleTaskResponse(workerId, message) {
+    const taskId = message.responseToId;
+    const pending = this.pendingResponses.get(taskId);
+    const task = this.activeTasks.get(taskId);
+    const workerInfo = this.workerInfos.get(workerId);
+    if (!pending || !task || !workerInfo) return;
+    clearTimeout(pending.timeout);
+    this.pendingResponses.delete(taskId);
+    this.activeTasks.delete(taskId);
+    workerInfo.status = _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.IDLE;
+    workerInfo.currentTaskId = void 0;
+    workerInfo.processedTasks++;
+    const processingTime = Date.now() - (task.startedAt || task.createdAt);
+    workerInfo.averageProcessingTime = (workerInfo.averageProcessingTime * (workerInfo.processedTasks - 1) + processingTime) / workerInfo.processedTasks;
+    task.completedAt = Date.now();
+    this.stats.totalProcessedTasks++;
+    const response = message.payload;
+    if (response.success) {
+      pending.resolve(response.data);
+      this.emit("taskCompleted", { taskId, workerId, result: response.data });
+    } else {
+      pending.reject(new Error(response.error || "Task failed"));
+      this.emit("taskFailed", { taskId, workerId, error: response.error });
+    }
+    this.processQueue();
+  }
+  /**
+   * 处理任务错误
+   */
+  handleTaskError(workerId, message) {
+    const error = message.payload;
+    const workerInfo = this.workerInfos.get(workerId);
+    if (workerInfo) {
+      workerInfo.errorCount++;
+      workerInfo.status = _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.ERROR;
+    }
+    if (error.taskId) {
+      const pending = this.pendingResponses.get(error.taskId);
+      const task = this.activeTasks.get(error.taskId);
+      if (pending && task) {
+        if (task.retryCount < task.maxRetries) {
+          task.retryCount++;
+          this.addTaskToQueue(task);
+          _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`Retrying task ${task.id}, attempt ${task.retryCount}/${task.maxRetries}`);
+        } else {
+          clearTimeout(pending.timeout);
+          this.pendingResponses.delete(error.taskId);
+          this.activeTasks.delete(error.taskId);
+          pending.reject(new Error(error.message));
+        }
+      }
+    }
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.error(`Worker ${workerId} error: ${error.message}`);
+    this.emit("workerError", { workerId, error });
+  }
+  /**
+   * 处理Worker错误
+   */
+  handleWorkerError(workerId, error) {
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.error(`Worker ${workerId} encountered error: ${error.message}`);
+    const workerInfo = this.workerInfos.get(workerId);
+    if (workerInfo) {
+      workerInfo.status = _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.ERROR;
+      workerInfo.errorCount++;
+    }
+    this.recreateWorker(workerId);
+  }
+  /**
+   * 处理Worker退出
+   */
+  handleWorkerExit(workerId, code) {
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`Worker ${workerId} exited with code ${code}`);
+    this.workers.delete(workerId);
+    const workerInfo = this.workerInfos.get(workerId);
+    if (workerInfo) {
+      workerInfo.status = _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.TERMINATED;
+    }
+    if (!this.isShuttingDown) {
+      this.recreateWorker(workerId);
+    }
+  }
+  /**
+   * 重新创建Worker - 优化版本
+   */
+  async recreateWorker(oldWorkerId) {
+    try {
+      const currentWorkerCount = this.workers.size;
+      const cpuCount = (__webpack_require__(/*! os */ "os").cpus)().length;
+      const maxAllowedWorkers = Math.min(cpuCount * 2, 16);
+      if (currentWorkerCount >= maxAllowedWorkers) {
+        _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`\u5DF2\u8FBE\u5230\u6700\u5927Worker\u6570\u91CF\u9650\u5236 (${maxAllowedWorkers})\uFF0C\u4E0D\u518D\u91CD\u5EFAWorker ${oldWorkerId}`);
+        return;
+      }
+      this.workers.delete(oldWorkerId);
+      this.workerInfos.delete(oldWorkerId);
+      await this.createWorker();
+      _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`Worker ${oldWorkerId} recreated (${this.workers.size}/${maxAllowedWorkers})`);
+    } catch (error) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.error(`Failed to recreate worker: ${error}`);
+    }
+  }
+  /**
+   * 添加任务到队列
+   */
+  addTaskToQueue(task) {
+    let insertIndex = this.taskQueue.length;
+    for (let i = 0; i < this.taskQueue.length; i++) {
+      if (this.taskQueue[i].priority < task.priority) {
+        insertIndex = i;
+        break;
+      }
+    }
+    this.taskQueue.splice(insertIndex, 0, task);
+    this.stats.queuedTasks = this.taskQueue.length;
+  }
+  /**
+   * 处理任务队列
+   */
+  processQueue() {
+    if (this.taskQueue.length === 0) return;
+    const idleWorker = this.findIdleWorker();
+    if (!idleWorker) {
+      if (this.workers.size < this.config.maxWorkers) {
+        this.createWorker().then(() => this.processQueue());
+      }
+      return;
+    }
+    const task = this.taskQueue.shift();
+    if (!task) return;
+    this.stats.queuedTasks = this.taskQueue.length;
+    this.assignTaskToWorker(idleWorker, task);
+  }
+  /**
+   * 查找空闲Worker
+   */
+  findIdleWorker() {
+    for (const [workerId, workerInfo] of this.workerInfos) {
+      if (workerInfo.status === _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.IDLE) {
+        return workerId;
+      }
+    }
+    return null;
+  }
+  /**
+   * 分配任务给Worker
+   */
+  assignTaskToWorker(workerId, task) {
+    const worker = this.workers.get(workerId);
+    const workerInfo = this.workerInfos.get(workerId);
+    if (!worker || !workerInfo) return;
+    workerInfo.status = _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.BUSY;
+    workerInfo.currentTaskId = task.id;
+    task.startedAt = Date.now();
+    this.activeTasks.set(task.id, task);
+    this.stats.processingTasks = this.activeTasks.size;
+    const message = {
+      id: this.generateMessageId(),
+      type: task.type,
+      payload: task.data,
+      timestamp: Date.now()
+    };
+    this.sendMessage(workerId, message);
+    this.emit("taskStarted", { taskId: task.id, workerId });
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.debug(`Task ${task.id} assigned to worker ${workerId}`);
+  }
+  /**
+   * 发送消息给Worker
+   */
+  async sendMessage(workerId, message) {
+    const worker = this.workers.get(workerId);
+    if (!worker) {
+      throw new Error(`Worker ${workerId} not found`);
+    }
+    worker.postMessage(message);
+  }
+  /**
+   * 终止Worker
+   */
+  async terminateWorker(worker) {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        worker.terminate();
+        resolve();
+      }, 5e3);
+      worker.once("exit", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      worker.postMessage({
+        id: this.generateMessageId(),
+        type: _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.TERMINATE,
+        payload: {},
+        timestamp: Date.now()
+      });
+    });
+  }
+  /**
+   * 启动心跳检测
+   */
+  startHeartbeat() {
+    this.heartbeatInterval = setInterval(() => {
+      this.performHeartbeat();
+    }, this.config.heartbeatInterval);
+  }
+  /**
+   * 执行心跳检测
+   */
+  performHeartbeat() {
+    const now = Date.now();
+    for (const [workerId, workerInfo] of this.workerInfos) {
+      if (now - workerInfo.lastActiveAt > this.config.workerTimeout) {
+        _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`Worker ${workerId} appears to be unresponsive`);
+        this.recreateWorker(workerId);
+        continue;
+      }
+      const worker = this.workers.get(workerId);
+      if (worker && workerInfo.status === _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.IDLE) {
+        worker.postMessage({
+          id: this.generateMessageId(),
+          type: _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerMessageType.PING,
+          payload: {},
+          timestamp: now
+        });
+      }
+    }
+  }
+  /**
+   * 更新统计信息
+   */
+  updateStats() {
+    let activeWorkers = 0;
+    let idleWorkers = 0;
+    for (const workerInfo of this.workerInfos.values()) {
+      if (workerInfo.status === _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.BUSY) {
+        activeWorkers++;
+      } else if (workerInfo.status === _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.IDLE) {
+        idleWorkers++;
+      }
+    }
+    this.stats.activeWorkers = activeWorkers;
+    this.stats.idleWorkers = idleWorkers;
+    this.stats.queuedTasks = this.taskQueue.length;
+    this.stats.processingTasks = this.activeTasks.size;
+    this.stats.systemLoad = activeWorkers / Math.max(1, this.workers.size) * 100;
+  }
+  /**
+   * 生成Worker ID
+   */
+  generateWorkerId() {
+    return `worker_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+  /**
+   * 生成任务ID
+   */
+  generateTaskId() {
+    return `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+  /**
+   * 生成消息ID
+   */
+  generateMessageId() {
+    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+  /**
+   * 新增：启动资源监控
+   */
+  startResourceMonitoring() {
+    this.resourceMonitorInterval = setInterval(() => {
+      this.performResourceCheck();
+    }, 3e4);
+  }
+  /**
+   * 新增：执行资源检查
+   */
+  performResourceCheck() {
+    const memUsage = process.memoryUsage();
+    const stats = this.getStats();
+    _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.debug("Resource check", {
+      memory: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+      workers: `${stats.activeWorkers}/${this.config.maxWorkers}`,
+      queue: stats.queuedTasks
+    });
+    if (stats.activeWorkers > 0 || stats.queuedTasks > 0) {
+      this.logWorkerProcessingStatus();
+    }
+    if (memUsage.heapUsed > 50 * 1024 * 1024) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn("High memory usage detected, cleaning up idle workers");
+      this.cleanupIdleWorkers();
+    }
+    if (stats.activeWorkers > this.config.maxWorkers) {
+      _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn("Too many active workers, forcing cleanup");
+      this.forceCleanupWorkers();
+    }
+  }
+  /**
+   * 新增：清理空闲Worker
+   */
+  cleanupIdleWorkers() {
+    const now = Date.now();
+    const idleThreshold = 6e4;
+    for (const [workerId, info] of this.workerInfos) {
+      if (info.status === _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.IDLE && now - info.lastActiveAt > idleThreshold) {
+        _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.info(`Cleaning up idle worker: ${workerId}`);
+        const worker = this.workers.get(workerId);
+        if (worker) {
+          this.terminateWorker(worker);
+        }
+      }
+    }
+  }
+  /**
+   * 新增：强制清理Worker
+   */
+  forceCleanupWorkers() {
+    const workerIds = Array.from(this.workerInfos.keys());
+    const excessCount = workerIds.length - this.config.maxWorkers;
+    if (excessCount > 0) {
+      const sortedWorkers = workerIds.map((id) => ({ id, info: this.workerInfos.get(id) })).sort((a, b) => {
+        if (a.info.status === _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.IDLE && b.info.status !== _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.IDLE) {
+          return -1;
+        }
+        if (b.info.status === _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.IDLE && a.info.status !== _types_worker_types__WEBPACK_IMPORTED_MODULE_4__.WorkerStatus.IDLE) {
+          return 1;
+        }
+        return a.info.createdAt - b.info.createdAt;
+      });
+      for (let i = 0; i < excessCount && i < sortedWorkers.length; i++) {
+        const workerId = sortedWorkers[i].id;
+        const worker = this.workers.get(workerId);
+        if (worker) {
+          _utils_logger__WEBPACK_IMPORTED_MODULE_3__.Logger.warn(`Force terminating worker: ${workerId}`);
+          this.terminateWorker(worker);
+        }
+      }
+    }
+  }
+}
+
+
+/***/ }),
+
+/***/ "events":
+/*!*************************!*\
+  !*** external "events" ***!
+  \*************************/
+/***/ ((module) => {
+
+module.exports = require("events");
+
+/***/ }),
+
+/***/ "fs/promises":
+/*!******************************!*\
+  !*** external "fs/promises" ***!
+  \******************************/
+/***/ ((module) => {
+
+module.exports = require("fs/promises");
+
+/***/ }),
+
+/***/ "os":
+/*!*********************!*\
+  !*** external "os" ***!
+  \*********************/
+/***/ ((module) => {
+
+module.exports = require("os");
+
+/***/ }),
+
+/***/ "path":
+/*!***********************!*\
+  !*** external "path" ***!
+  \***********************/
+/***/ ((module) => {
+
+module.exports = require("path");
+
+/***/ }),
+
+/***/ "vscode":
+/*!*************************!*\
+  !*** external "vscode" ***!
+  \*************************/
+/***/ ((module) => {
+
+module.exports = require("vscode");
+
+/***/ }),
+
+/***/ "worker_threads":
+/*!*********************************!*\
+  !*** external "worker_threads" ***!
+  \*********************************/
+/***/ ((module) => {
+
+module.exports = require("worker_threads");
+
+/***/ })
+
+/******/ 	});
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		if (cachedModule !== undefined) {
+/******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			// no module.id needed
+/******/ 			// no module.loaded needed
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId](module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/ 	
+/******/ 	// expose the modules object (__webpack_modules__)
+/******/ 	__webpack_require__.m = __webpack_modules__;
+/******/ 	
+/************************************************************************/
+/******/ 	/* webpack/runtime/compat get default export */
+/******/ 	(() => {
+/******/ 		// getDefaultExport function for compatibility with non-harmony modules
+/******/ 		__webpack_require__.n = (module) => {
+/******/ 			var getter = module && module.__esModule ?
+/******/ 				() => (module['default']) :
+/******/ 				() => (module);
+/******/ 			__webpack_require__.d(getter, { a: getter });
+/******/ 			return getter;
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/define property getters */
+/******/ 	(() => {
+/******/ 		// define getter functions for harmony exports
+/******/ 		__webpack_require__.d = (exports, definition) => {
+/******/ 			for(var key in definition) {
+/******/ 				if(__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
+/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 				}
+/******/ 			}
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/ensure chunk */
+/******/ 	(() => {
+/******/ 		__webpack_require__.f = {};
+/******/ 		// This file contains only the entry chunk.
+/******/ 		// The chunk loading function for additional chunks
+/******/ 		__webpack_require__.e = (chunkId) => {
+/******/ 			return Promise.all(Object.keys(__webpack_require__.f).reduce((promises, key) => {
+/******/ 				__webpack_require__.f[key](chunkId, promises);
+/******/ 				return promises;
+/******/ 			}, []));
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/get javascript chunk filename */
+/******/ 	(() => {
+/******/ 		// This function allow to reference async chunks
+/******/ 		__webpack_require__.u = (chunkId) => {
+/******/ 			// return url for filenames based on template
+/******/ 			return "" + chunkId + ".extension.js";
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
+/******/ 	(() => {
+/******/ 		__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/make namespace object */
+/******/ 	(() => {
+/******/ 		// define __esModule on exports
+/******/ 		__webpack_require__.r = (exports) => {
+/******/ 			if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 				Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 			}
+/******/ 			Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/require chunk loading */
+/******/ 	(() => {
+/******/ 		// no baseURI
+/******/ 		
+/******/ 		// object to store loaded chunks
+/******/ 		// "1" means "loaded", otherwise not loaded yet
+/******/ 		var installedChunks = {
+/******/ 			"main": 1
+/******/ 		};
+/******/ 		
+/******/ 		// no on chunks loaded
+/******/ 		
+/******/ 		var installChunk = (chunk) => {
+/******/ 			var moreModules = chunk.modules, chunkIds = chunk.ids, runtime = chunk.runtime;
+/******/ 			for(var moduleId in moreModules) {
+/******/ 				if(__webpack_require__.o(moreModules, moduleId)) {
+/******/ 					__webpack_require__.m[moduleId] = moreModules[moduleId];
+/******/ 				}
+/******/ 			}
+/******/ 			if(runtime) runtime(__webpack_require__);
+/******/ 			for(var i = 0; i < chunkIds.length; i++)
+/******/ 				installedChunks[chunkIds[i]] = 1;
+/******/ 		
+/******/ 		};
+/******/ 		
+/******/ 		// require() chunk loading for javascript
+/******/ 		__webpack_require__.f.require = (chunkId, promises) => {
+/******/ 			// "1" is the signal for "already loaded"
+/******/ 			if(!installedChunks[chunkId]) {
+/******/ 				if(true) { // all chunks have JS
+/******/ 					installChunk(require("./" + __webpack_require__.u(chunkId)));
+/******/ 				} else installedChunks[chunkId] = 1;
+/******/ 			}
+/******/ 		};
+/******/ 		
+/******/ 		// no external install chunk
+/******/ 		
+/******/ 		// no HMR
+/******/ 		
+/******/ 		// no HMR manifest
+/******/ 	})();
+/******/ 	
+/************************************************************************/
+var __webpack_exports__ = {};
+// This entry needs to be wrapped in an IIFE because it needs to be isolated against other modules in the chunk.
+(() => {
+/*!**************************!*\
+  !*** ./src/extension.ts ***!
+  \**************************/
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   activate: () => (/* binding */ activate),
+/* harmony export */   deactivate: () => (/* binding */ deactivate)
+/* harmony export */ });
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vscode */ "vscode");
+/* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(vscode__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _utils_logger__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./utils/logger */ "./src/utils/logger.ts");
+/* harmony import */ var _utils_state_manager__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./utils/state-manager */ "./src/utils/state-manager.ts");
+/* harmony import */ var _utils_config_manager__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./utils/config-manager */ "./src/utils/config-manager.ts");
+/* harmony import */ var _commands_command_handler__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./commands/command-handler */ "./src/commands/command-handler.ts");
+/* harmony import */ var _ui_webview_provider__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./ui/webview-provider */ "./src/ui/webview-provider.ts");
+
+
+
+
+
+
+
+let stateManager;
+let configManager;
+let commandHandler;
+let webviewProvider;
+async function activate(context) {
+  _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.initialize();
+  stateManager = _utils_state_manager__WEBPACK_IMPORTED_MODULE_2__.StateManager.initialize(context);
+  configManager = _utils_config_manager__WEBPACK_IMPORTED_MODULE_3__.ConfigManager.getInstance();
+  webviewProvider = new _ui_webview_provider__WEBPACK_IMPORTED_MODULE_5__.ERDiagramWebViewProvider(context.extensionUri, context);
+  context.subscriptions.push(
+    vscode__WEBPACK_IMPORTED_MODULE_0__.window.registerWebviewViewProvider(
+      _ui_webview_provider__WEBPACK_IMPORTED_MODULE_5__.ERDiagramWebViewProvider.viewType,
+      webviewProvider
+    )
+  );
+  commandHandler = new _commands_command_handler__WEBPACK_IMPORTED_MODULE_4__.CommandHandler(stateManager, configManager, webviewProvider);
+  try {
+    await commandHandler.initialize();
+    _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("Worker\u7BA1\u7406\u5668\u521D\u59CB\u5316\u5B8C\u6210");
+  } catch (error) {
+    _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.error("Worker\u7BA1\u7406\u5668\u521D\u59CB\u5316\u5931\u8D25", error);
+    vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage(`Worker\u7BA1\u7406\u5668\u521D\u59CB\u5316\u5931\u8D25: ${error}`);
+    return;
+  }
+  _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("MyBatis ER Generator \u6269\u5C55\u5DF2\u6FC0\u6D3B");
+  const configValidation = configManager.validateConfig();
+  if (!configValidation.valid) {
+    _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.warn("\u914D\u7F6E\u9A8C\u8BC1\u5931\u8D25", configValidation.errors);
+    vscode__WEBPACK_IMPORTED_MODULE_0__.window.showWarningMessage(
+      `\u914D\u7F6E\u5B58\u5728\u95EE\u9898: ${configValidation.errors.join(", ")}`
+    );
+  }
+  const generateCommand = vscode__WEBPACK_IMPORTED_MODULE_0__.commands.registerCommand(
+    "mybatis-er.generate",
+    () => commandHandler.handleGenerateERDiagram()
+  );
+  const refreshCommand = vscode__WEBPACK_IMPORTED_MODULE_0__.commands.registerCommand(
+    "mybatis-er.refresh",
+    () => commandHandler.handleRefreshERDiagram()
+  );
+  const exportCommand = vscode__WEBPACK_IMPORTED_MODULE_0__.commands.registerCommand(
+    "mybatis-er.export",
+    () => commandHandler.handleExportERDiagram()
+  );
+  const settingsCommand = vscode__WEBPACK_IMPORTED_MODULE_0__.commands.registerCommand(
+    "mybatis-er.settings",
+    () => commandHandler.handleOpenSettings()
+  );
+  const statusCommand = vscode__WEBPACK_IMPORTED_MODULE_0__.commands.registerCommand(
+    "mybatis-er.status",
+    () => commandHandler.handleShowStatus()
+  );
+  const clearCacheCommand = vscode__WEBPACK_IMPORTED_MODULE_0__.commands.registerCommand(
+    "mybatis-er.clearCache",
+    () => commandHandler.handleClearCache()
+  );
+  const testWebViewCommand = vscode__WEBPACK_IMPORTED_MODULE_0__.commands.registerCommand(
+    "mybatis-er.testWebView",
+    () => commandHandler.handleTestWebView()
+  );
+  const performanceBenchmarkCommand = vscode__WEBPACK_IMPORTED_MODULE_0__.commands.registerCommand(
+    "mybatis-er.performanceBenchmark",
+    () => commandHandler.handlePerformanceBenchmark()
+  );
+  const simpleTestCommand = vscode__WEBPACK_IMPORTED_MODULE_0__.commands.registerCommand(
+    "mybatis-er.simpleTest",
+    () => commandHandler.handleSimpleTest()
+  );
+  const configChangeDisposable = configManager.onConfigChanged((newConfig) => {
+    _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u914D\u7F6E\u5DF2\u53D8\u66F4\uFF0C\u91CD\u65B0\u5E94\u7528\u8BBE\u7F6E", newConfig);
+  });
+  const workspaceChangeDisposable = vscode__WEBPACK_IMPORTED_MODULE_0__.workspace.onDidChangeWorkspaceFolders(async (event) => {
+    _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u5DE5\u4F5C\u7A7A\u95F4\u5DF2\u53D8\u66F4", {
+      added: event.added.length,
+      removed: event.removed.length
+    });
+    if (event.removed.length > 0) {
+      await stateManager.resetWorkspaceState();
+    }
+  });
+  context.subscriptions.push(
+    generateCommand,
+    refreshCommand,
+    exportCommand,
+    settingsCommand,
+    statusCommand,
+    clearCacheCommand,
+    testWebViewCommand,
+    performanceBenchmarkCommand,
+    simpleTestCommand,
+    configChangeDisposable,
+    workspaceChangeDisposable,
+    // 添加清理函数
+    { dispose: () => commandHandler.dispose() }
+  );
+  const configSummary = configManager.getConfigSummary();
+  const stateStats = stateManager.getStateStats();
+  vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage("MyBatis ER Generator \u5DF2\u5C31\u7EEA\uFF01");
+  _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("\u6269\u5C55\u6FC0\u6D3B\u5B8C\u6210\uFF0C\u6240\u6709\u547D\u4EE4\u5DF2\u6CE8\u518C", {
+    config: configSummary,
+    state: stateStats
+  });
+}
+async function deactivate() {
+  _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("MyBatis ER Generator \u6269\u5C55\u6B63\u5728\u505C\u7528...");
+  if (commandHandler) {
+    await commandHandler.dispose();
+  }
+  _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.info("MyBatis ER Generator \u6269\u5C55\u5DF2\u505C\u7528");
+  _utils_logger__WEBPACK_IMPORTED_MODULE_1__.Logger.dispose();
+}
+
+})();
+
+module.exports = __webpack_exports__;
+/******/ })()
+;
 //# sourceMappingURL=extension.js.map

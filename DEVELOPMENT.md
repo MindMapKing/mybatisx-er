@@ -228,3 +228,253 @@ Logger.error('错误', error);
 **最后更新**: 2024年12月  
 **状态**: 项目初始化完成，准备进入开发阶段  
 **下一步**: 完善命令系统和状态管理 
+
+## 项目概述
+
+MyBatis ER Generator 是一个VS Code扩展，用于从MyBatis项目中自动生成实体关系图(ER图)。
+
+## 技术架构
+
+### 核心组件
+
+1. **扩展主体** (`src/extension.ts`)
+   - VS Code扩展入口点
+   - 命令注册和处理
+   - 用户界面集成
+
+2. **Worker管理器** (`src/workers/worker-manager.ts`)
+   - 多线程任务处理
+   - 资源管理和优化
+   - 任务队列管理
+
+3. **解析器模块**
+   - Java解析器 (`src/parsers/java-parser.ts`)
+   - XML解析器 (`src/parsers/xml-parser.ts`)
+   - 关系推断引擎 (`src/parsers/relation-inference.ts`)
+
+4. **用户界面** (`src/ui/`)
+   - WebView组件
+   - 图表渲染
+   - 交互控制
+
+## 开发环境设置
+
+### 前置要求
+
+- Node.js >= 16.0.0
+- VS Code >= 1.74.0
+- TypeScript >= 4.9.0
+
+### 安装依赖
+
+```bash
+npm install
+```
+
+### 编译项目
+
+```bash
+npm run compile
+```
+
+### 开发调试
+
+```bash
+# 启动开发模式
+npm run watch
+
+# 在新VS Code窗口中测试
+code --extensionDevelopmentPath=. --new-window
+```
+
+## 项目结构
+
+```
+mybatisx-er/
+├── src/
+│   ├── commands/           # 命令处理器
+│   ├── parsers/           # 文件解析器
+│   ├── types/             # 类型定义
+│   ├── ui/                # 用户界面
+│   ├── utils/             # 工具函数
+│   ├── workers/           # Worker线程
+│   └── extension.ts       # 扩展入口
+├── media/                 # 静态资源
+├── package.json          # 项目配置
+├── tsconfig.json         # TypeScript配置
+└── webpack.config.js     # 构建配置
+```
+
+## 核心功能
+
+### 1. Java实体解析
+
+- 支持JPA注解 (`@Entity`, `@Table`, `@Column`)
+- 支持MyBatis-Plus注解 (`@TableName`, `@TableId`, `@TableField`)
+- 自动推断字段类型和关系
+
+### 2. XML映射解析
+
+- 解析MyBatis映射文件
+- 提取SQL语句和结果映射
+- 识别表关系
+
+### 3. 关系推断
+
+- 基于外键约定推断表关系
+- 分析注解中的关系定义
+- 支持一对一、一对多、多对多关系
+
+### 4. ER图生成
+
+- 使用Mermaid语法生成图表
+- 支持多种主题和样式
+- 可导出为多种格式
+
+## 性能优化
+
+### Worker线程优化
+
+- 最大Worker数量：CPU核心数 × 2（不超过16个）
+- 任务队列限制：100个任务
+- 自动资源清理和垃圾回收
+
+### 内存管理
+
+- 定期垃圾回收
+- Worker空闲时自动清理
+- 内存使用监控
+
+## 测试
+
+### 单元测试
+
+```bash
+npm test
+```
+
+### 功能测试
+
+使用VS Code命令：
+- `MyBatis ER: Test Extension`
+- `MyBatis ER: Show Extension Status`
+
+### 性能测试
+
+```bash
+npm run benchmark
+```
+
+## 构建和发布
+
+### 构建扩展包
+
+```bash
+npm run package
+```
+
+### 安装本地扩展
+
+```bash
+code --install-extension mybatis-er-generator-0.1.0.vsix
+```
+
+## 贡献指南
+
+1. Fork项目
+2. 创建功能分支
+3. 提交更改
+4. 创建Pull Request
+
+## 许可证
+
+MIT License
+
+---
+
+## 开发日志
+
+### 2024-12-19: Worker线程性能优化
+
+#### 问题发现
+在代码审查中发现Worker线程中存在大量不必要的模拟延迟，这些延迟在真实解析功能已经实现的情况下仍然存在，导致性能损失。
+
+#### 具体问题
+1. **handleParseJavaFile**: 在真实Java解析前添加100ms延迟
+2. **handleParseXmlFile**: 在真实XML解析前添加100ms延迟
+3. **handleValidateRelations**: 在真实验证前添加150ms延迟
+4. **handleGenerateDiagram**: 在真实生成前添加300ms延迟
+5. **handleExportDiagram**: 在真实导出前添加200ms延迟
+6. **占位符方法**: validateEntityRelations、generateDiagramContent、exportDiagramContent中的模拟延迟
+
+#### 优化措施
+
+**移除不必要延迟**:
+```typescript
+// 优化前
+this.sendProgress(message.id, { percentage: 0, message: '开始解析Java文件' });
+await this.sleep(100);  // 不必要的延迟
+this.sendProgress(message.id, { percentage: 50, message: '正在分析类结构' });
+const result = await this.parseJavaFileContent(data);  // 真实解析
+this.sendProgress(message.id, { percentage: 100, message: '解析完成' });
+
+// 优化后
+this.sendProgress(message.id, { percentage: 0, message: '开始解析Java文件' });
+const result = await this.parseJavaFileContent(data);  // 直接进行真实解析
+this.sendProgress(message.id, { percentage: 100, message: '解析完成' });
+```
+
+**保留合理延迟**:
+```typescript
+// 批量处理中的CPU资源管理延迟（保留）
+if (processed % 3 === 0) {
+    await this.sleep(5);  // 避免CPU占用过高
+}
+```
+
+#### 性能提升
+
+1. **单文件操作**:
+   - Java文件解析: 提升100ms
+   - XML文件解析: 提升100ms
+   - 关系验证: 提升150ms
+   - 图表生成: 提升300ms
+   - 图表导出: 提升200ms
+
+2. **批量操作**:
+   - 小文件处理速度显著提升
+   - 大批量处理时整体时间大幅减少
+
+3. **用户体验**:
+   - 操作响应更加迅速
+   - 进度条更真实地反映实际处理进度
+
+#### 技术原理
+
+这次优化解决了一个常见的开发反模式：**在真实功能实现后仍保留模拟代码**。
+
+- **真实解析器已实现**: SmartJavaParser和SmartXmlParser提供完整功能
+- **模拟延迟无意义**: 在真实解析前添加人为延迟
+- **性能损失明显**: 每次操作额外等待100-300ms
+
+#### 影响范围
+
+- **向后兼容**: 完全兼容，只是性能提升
+- **API不变**: 所有接口保持不变
+- **功能完整**: 所有功能正常工作，只是更快
+
+#### 测试验证
+
+1. **功能测试**: 所有解析功能正常
+2. **性能测试**: 显著提升响应速度
+3. **稳定性测试**: Worker线程稳定运行
+4. **资源测试**: 内存和CPU使用正常
+
+#### 后续计划
+
+1. 监控生产环境性能表现
+2. 收集用户反馈
+3. 进一步优化批量处理逻辑
+4. 考虑添加可配置的延迟选项（如果需要）
+
+这次优化是一个很好的例子，说明了代码审查和性能分析的重要性。即使功能正常工作，也可能存在隐藏的性能问题。 

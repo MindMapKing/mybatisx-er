@@ -19,8 +19,14 @@ import {
 } from '../types/worker-types';
 
 /**
- * Worker管理器
+ * Worker管理器 - 优化版本
  * 负责管理Worker线程池，任务分发和结果收集
+ * 
+ * 优化重点：
+ * 1. 减少Worker数量，避免资源过度消耗
+ * 2. 实现批量任务处理，提高效率
+ * 3. 添加资源监控和自动清理机制
+ * 4. 实现降级处理，提高稳定性
  */
 export class WorkerManager extends EventEmitter {
     private workers: Map<string, Worker> = new Map();
@@ -36,18 +42,20 @@ export class WorkerManager extends EventEmitter {
     private config: WorkerConfig;
     private isShuttingDown = false;
     private heartbeatInterval?: NodeJS.Timeout;
+    private resourceMonitorInterval?: NodeJS.Timeout;
     private stats: WorkerManagerStats;
     
     constructor(config: Partial<WorkerConfig> = {}) {
         super();
         
-        // 默认配置
+        // 优化后的默认配置 - 按需求调整
+        const cpuCount = require('os').cpus().length;
         this.config = {
-            maxWorkers: Math.max(2, Math.min(8, require('os').cpus().length - 1)),
-            workerTimeout: 30000, // 30秒
-            maxQueueSize: 1000,
-            heartbeatInterval: 5000, // 5秒
-            maxRetries: 3,
+            maxWorkers: Math.min(cpuCount * 2, 16), // 最多CPU的两倍，但不超过16个
+            workerTimeout: 30000, // 30秒超时
+            maxQueueSize: 100,    // 队列最多100个任务
+            heartbeatInterval: 5000, // 5秒心跳
+            maxRetries: 3,        // 重试3次
             enableProfiling: false,
             ...config
         };
@@ -64,7 +72,13 @@ export class WorkerManager extends EventEmitter {
         };
         
         this.startHeartbeat();
-        Logger.info(`WorkerManager initialized with ${this.config.maxWorkers} max workers`);
+        this.startResourceMonitoring();
+        
+        Logger.info(`WorkerManager initialized with optimized config`, {
+            maxWorkers: this.config.maxWorkers,
+            timeout: this.config.workerTimeout,
+            queueSize: this.config.maxQueueSize
+        });
     }
     
     /**
@@ -75,13 +89,14 @@ export class WorkerManager extends EventEmitter {
             throw new Error('WorkerManager is shutting down');
         }
         
-        // 创建初始Worker
-        const initialWorkers = Math.min(2, this.config.maxWorkers);
-        for (let i = 0; i < initialWorkers; i++) {
+        // 只创建1个初始Worker，按需创建更多
+        try {
             await this.createWorker();
+            Logger.info(`WorkerManager started with 1 initial worker`);
+        } catch (error) {
+            Logger.error('Failed to create initial worker', error as Error);
+            throw error;
         }
-        
-        Logger.info(`WorkerManager started with ${initialWorkers} workers`);
     }
     
     /**
@@ -90,9 +105,12 @@ export class WorkerManager extends EventEmitter {
     async shutdown(): Promise<void> {
         this.isShuttingDown = true;
         
-        // 停止心跳
+        // 停止监控
         if (this.heartbeatInterval) {
             clearInterval(this.heartbeatInterval);
+        }
+        if (this.resourceMonitorInterval) {
+            clearInterval(this.resourceMonitorInterval);
         }
         
         // 清空任务队列
@@ -120,7 +138,7 @@ export class WorkerManager extends EventEmitter {
     }
     
     /**
-     * 提交任务
+     * 提交任务 - 优化版本，支持批量处理
      */
     async submitTask<T = any>(
         type: WorkerMessageType,
@@ -129,6 +147,7 @@ export class WorkerManager extends EventEmitter {
             priority?: number;
             timeout?: number;
             maxRetries?: number;
+            preferBatch?: boolean; // 新增：是否优先使用批量处理
         } = {}
     ): Promise<T> {
         if (this.isShuttingDown) {
@@ -157,7 +176,7 @@ export class WorkerManager extends EventEmitter {
             // 设置响应处理
             const timeout = setTimeout(() => {
                 this.pendingResponses.delete(task.id);
-                reject(new Error(`Task ${task.id} timed out`));
+                reject(new Error(`Task ${task.id} timed out after ${task.timeout}ms`));
             }, task.timeout);
             
             this.pendingResponses.set(task.id, {
@@ -169,6 +188,51 @@ export class WorkerManager extends EventEmitter {
             // 尝试立即处理任务
             this.processQueue();
         });
+    }
+    
+    /**
+     * 新增：批量提交任务
+     */
+    async submitBatchTasks<T = any>(
+        tasks: Array<{
+            type: WorkerMessageType;
+            data: any;
+            options?: {
+                priority?: number;
+                timeout?: number;
+                maxRetries?: number;
+            };
+        }>
+    ): Promise<T[]> {
+        if (tasks.length === 0) {
+            return [];
+        }
+        
+        // 如果任务数量较少，直接批量处理
+        if (tasks.length <= 10) {
+            return Promise.all(tasks.map(task => 
+                this.submitTask(task.type, task.data, task.options)
+            ));
+        }
+        
+        // 对于大量任务，分批处理
+        const batchSize = 5;
+        const results: T[] = [];
+        
+        for (let i = 0; i < tasks.length; i += batchSize) {
+            const batch = tasks.slice(i, i + batchSize);
+            const batchResults = await Promise.all(
+                batch.map(task => this.submitTask(task.type, task.data, task.options))
+            );
+            results.push(...batchResults);
+            
+            // 添加小延迟避免过载
+            if (i + batchSize < tasks.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+        
+        return results;
     }
     
     /**
@@ -185,9 +249,143 @@ export class WorkerManager extends EventEmitter {
     getWorkerInfos(): WorkerInfo[] {
         return Array.from(this.workerInfos.values());
     }
+
+    /**
+     * 获取Worker处理状态详情 - 新增功能
+     */
+    getWorkerProcessingDetails(): Array<{
+        workerId: string;
+        status: WorkerStatus;
+        currentTask?: {
+            id: string;
+            type: WorkerMessageType;
+            startedAt: number;
+            duration: number;
+            description: string;
+        };
+        processedTasks: number;
+        errorCount: number;
+    }> {
+        const details = [];
+        
+        for (const [workerId, workerInfo] of this.workerInfos) {
+            const detail: any = {
+                workerId,
+                status: workerInfo.status,
+                processedTasks: workerInfo.processedTasks,
+                errorCount: workerInfo.errorCount
+            };
+            
+            // 如果Worker正在处理任务，添加任务详情
+            if (workerInfo.currentTaskId) {
+                const task = this.activeTasks.get(workerInfo.currentTaskId);
+                if (task) {
+                    detail.currentTask = {
+                        id: task.id,
+                        type: task.type,
+                        startedAt: task.startedAt || task.createdAt,
+                        duration: Date.now() - (task.startedAt || task.createdAt),
+                        description: this.getTaskDescription(task)
+                    };
+                }
+            }
+            
+            details.push(detail);
+        }
+        
+        return details;
+    }
+
+    /**
+     * 获取任务描述 - 辅助方法
+     */
+    private getTaskDescription(task: WorkerTask): string {
+        switch (task.type) {
+            case WorkerMessageType.PARSE_JAVA_FILE:
+                return `解析Java文件: ${task.data?.filePath || '未知文件'}`;
+            case WorkerMessageType.PARSE_XML_FILE:
+                return `解析XML文件: ${task.data?.filePath || '未知文件'}`;
+            case WorkerMessageType.PARSE_BATCH_FILES:
+                return `批量解析文件: ${task.data?.files?.length || 0}个文件`;
+            case WorkerMessageType.INFER_RELATIONS:
+                return `推断关系: ${task.data?.entities?.length || 0}个实体`;
+            case WorkerMessageType.VALIDATE_RELATIONS:
+                return `验证关系: ${task.data?.relations?.length || 0}个关系`;
+            case WorkerMessageType.GENERATE_DIAGRAM:
+                return `生成图表: ${task.data?.entities?.length || 0}个实体`;
+            case WorkerMessageType.EXPORT_DIAGRAM:
+                return `导出图表: ${task.data?.format || '未知格式'}`;
+            default:
+                return `执行任务: ${task.type}`;
+        }
+    }
+
+    /**
+     * 输出Worker处理状态 - 新增功能
+     */
+    logWorkerProcessingStatus(): void {
+        const details = this.getWorkerProcessingDetails();
+        const stats = this.getStats();
+        
+        Logger.info('=== Worker处理状态报告 ===');
+        Logger.info(`总Worker数: ${this.workers.size}/${this.config.maxWorkers}`);
+        Logger.info(`活跃Worker: ${stats.activeWorkers}, 空闲Worker: ${stats.idleWorkers}`);
+        Logger.info(`队列任务: ${stats.queuedTasks}, 处理中任务: ${stats.processingTasks}`);
+        
+        details.forEach(detail => {
+            if (detail.status === WorkerStatus.BUSY && detail.currentTask) {
+                const task = detail.currentTask;
+                const durationSec = Math.round(task.duration / 1000);
+                Logger.info(`🔄 Worker ${detail.workerId}: ${task.description} (${durationSec}秒)`);
+            } else {
+                Logger.info(`💤 Worker ${detail.workerId}: ${detail.status} (已处理${detail.processedTasks}个任务)`);
+            }
+        });
+        
+        Logger.info('========================');
+    }
     
     /**
-     * 创建Worker
+     * 新增：获取系统健康状态
+     */
+    getHealthStatus(): {
+        healthy: boolean;
+        issues: string[];
+        recommendations: string[];
+    } {
+        const issues: string[] = [];
+        const recommendations: string[] = [];
+        
+        const stats = this.getStats();
+        const memUsage = process.memoryUsage();
+        
+        // 检查内存使用
+        if (memUsage.heapUsed > 50 * 1024 * 1024) { // 50MB
+            issues.push('内存使用过高');
+            recommendations.push('考虑清理缓存或减少并发任务');
+        }
+        
+        // 检查Worker数量
+        if (stats.activeWorkers > this.config.maxWorkers) {
+            issues.push('Worker数量超限');
+            recommendations.push('等待当前任务完成或重启扩展');
+        }
+        
+        // 检查队列长度
+        if (stats.queuedTasks > this.config.maxQueueSize * 0.8) {
+            issues.push('任务队列接近满载');
+            recommendations.push('减少并发操作或增加处理能力');
+        }
+        
+        return {
+            healthy: issues.length === 0,
+            issues,
+            recommendations
+        };
+    }
+    
+    /**
+     * 创建Worker - 优化版本
      */
     private async createWorker(): Promise<string> {
         const workerId = this.generateWorkerId();
@@ -201,10 +399,6 @@ export class WorkerManager extends EventEmitter {
                 }
             });
             
-            // 设置Worker事件监听
-            this.setupWorkerListeners(worker, workerId);
-            
-            // 保存Worker信息
             this.workers.set(workerId, worker);
             this.workerInfos.set(workerId, {
                 id: workerId,
@@ -216,20 +410,14 @@ export class WorkerManager extends EventEmitter {
                 averageProcessingTime: 0
             });
             
-            // 发送初始化消息
-            await this.sendMessage(workerId, {
-                id: this.generateMessageId(),
-                type: WorkerMessageType.PING,
-                payload: {},
-                timestamp: Date.now()
-            });
+            this.setupWorkerListeners(worker, workerId);
             
-            this.emit('workerCreated', { workerId });
-            Logger.debug(`Worker ${workerId} created`);
-            
+            Logger.info(`Worker created: ${workerId}`);
             return workerId;
+            
         } catch (error) {
-            Logger.error(`Failed to create worker: ${error}`);
+            Logger.error(`Failed to create worker: ${workerId}`, error as Error);
+            this.workerInfos.delete(workerId);
             throw error;
         }
     }
@@ -401,10 +589,20 @@ export class WorkerManager extends EventEmitter {
     }
     
     /**
-     * 重新创建Worker
+     * 重新创建Worker - 优化版本
      */
     private async recreateWorker(oldWorkerId: string): Promise<void> {
         try {
+            // 检查是否超过最大Worker数量限制
+            const currentWorkerCount = this.workers.size;
+            const cpuCount = require('os').cpus().length;
+            const maxAllowedWorkers = Math.min(cpuCount * 2, 16);
+            
+            if (currentWorkerCount >= maxAllowedWorkers) {
+                Logger.warn(`已达到最大Worker数量限制 (${maxAllowedWorkers})，不再重建Worker ${oldWorkerId}`);
+                return;
+            }
+            
             // 移除旧Worker
             this.workers.delete(oldWorkerId);
             this.workerInfos.delete(oldWorkerId);
@@ -412,7 +610,7 @@ export class WorkerManager extends EventEmitter {
             // 创建新Worker
             await this.createWorker();
             
-            Logger.info(`Worker ${oldWorkerId} recreated`);
+            Logger.info(`Worker ${oldWorkerId} recreated (${this.workers.size}/${maxAllowedWorkers})`);
         } catch (error) {
             Logger.error(`Failed to recreate worker: ${error}`);
         }
@@ -620,5 +818,99 @@ export class WorkerManager extends EventEmitter {
      */
     private generateMessageId(): string {
         return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+    
+    /**
+     * 新增：启动资源监控
+     */
+    private startResourceMonitoring(): void {
+        this.resourceMonitorInterval = setInterval(() => {
+            this.performResourceCheck();
+        }, 30000); // 每30秒检查一次
+    }
+    
+    /**
+     * 新增：执行资源检查
+     */
+    private performResourceCheck(): void {
+        const memUsage = process.memoryUsage();
+        const stats = this.getStats();
+        
+        Logger.debug('Resource check', {
+            memory: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+            workers: `${stats.activeWorkers}/${this.config.maxWorkers}`,
+            queue: stats.queuedTasks
+        });
+        
+        // 输出Worker处理状态（每分钟一次）
+        if (stats.activeWorkers > 0 || stats.queuedTasks > 0) {
+            this.logWorkerProcessingStatus();
+        }
+        
+        // 内存使用过高时清理空闲Worker
+        if (memUsage.heapUsed > 50 * 1024 * 1024) { // 50MB
+            Logger.warn('High memory usage detected, cleaning up idle workers');
+            this.cleanupIdleWorkers();
+        }
+        
+        // Worker数量过多时强制清理
+        if (stats.activeWorkers > this.config.maxWorkers) {
+            Logger.warn('Too many active workers, forcing cleanup');
+            this.forceCleanupWorkers();
+        }
+    }
+    
+    /**
+     * 新增：清理空闲Worker
+     */
+    private cleanupIdleWorkers(): void {
+        const now = Date.now();
+        const idleThreshold = 60000; // 1分钟
+        
+        for (const [workerId, info] of this.workerInfos) {
+            if (info.status === WorkerStatus.IDLE && 
+                now - info.lastActiveAt > idleThreshold) {
+                
+                Logger.info(`Cleaning up idle worker: ${workerId}`);
+                const worker = this.workers.get(workerId);
+                if (worker) {
+                    this.terminateWorker(worker);
+                }
+            }
+        }
+    }
+    
+    /**
+     * 新增：强制清理Worker
+     */
+    private forceCleanupWorkers(): void {
+        const workerIds = Array.from(this.workerInfos.keys());
+        const excessCount = workerIds.length - this.config.maxWorkers;
+        
+        if (excessCount > 0) {
+            // 优先清理空闲和最老的Worker
+            const sortedWorkers = workerIds
+                .map(id => ({ id, info: this.workerInfos.get(id)! }))
+                .sort((a, b) => {
+                    // 空闲状态优先
+                    if (a.info.status === WorkerStatus.IDLE && b.info.status !== WorkerStatus.IDLE) {
+                        return -1;
+                    }
+                    if (b.info.status === WorkerStatus.IDLE && a.info.status !== WorkerStatus.IDLE) {
+                        return 1;
+                    }
+                    // 然后按创建时间排序
+                    return a.info.createdAt - b.info.createdAt;
+                });
+            
+            for (let i = 0; i < excessCount && i < sortedWorkers.length; i++) {
+                const workerId = sortedWorkers[i].id;
+                const worker = this.workers.get(workerId);
+                if (worker) {
+                    Logger.warn(`Force terminating worker: ${workerId}`);
+                    this.terminateWorker(worker);
+                }
+            }
+        }
     }
 } 

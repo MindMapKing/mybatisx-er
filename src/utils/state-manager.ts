@@ -130,6 +130,7 @@ export class StateManager {
             // 返回默认配置合并用户配置
             return {
                 autoRefresh: true,
+                includeTestFiles: false,
                 inferenceStrategies: {
                     naming: true,
                     xml: true,
@@ -145,6 +146,7 @@ export class StateManager {
             // 返回默认配置
             return {
                 autoRefresh: true,
+                includeTestFiles: false,
                 inferenceStrategies: {
                     naming: true,
                     xml: true,
@@ -273,6 +275,30 @@ export class StateManager {
                 10
             );
 
+            const gitignoreFile = await vscode.workspace.findFiles('.gitignore');
+            if (gitignoreFile.length > 0) {
+                const gitignoreContent = await vscode.workspace.fs.readFile(gitignoreFile[0]);
+                const gitignoreText = Buffer.from(gitignoreContent).toString('utf8');
+                const gitignorePatterns = gitignoreText.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+                // 使用gitignore模式过滤文件
+                const filteredFiles = files.filter(file => {
+                    const relativePath = vscode.workspace.asRelativePath(file);
+                    return !gitignorePatterns.some(pattern => {
+                        // 简单的glob模式匹配
+                        if (pattern.includes('*')) {
+                            const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+                            return regex.test(relativePath);
+                        }
+                        return relativePath.includes(pattern);
+                    });
+                });
+                
+                // 更新files为过滤后的结果
+                files.splice(0, files.length, ...filteredFiles);
+            }
+
+            
+
             // 简单检查是否包含MyBatis相关内容
             for (const file of files) {
                 const content = await vscode.workspace.fs.readFile(file);
@@ -311,8 +337,13 @@ export class StateManager {
     /**
      * 获取全局设置
      */
+    getGlobalSetting<T>(key: string, defaultValue: T): T;
+    getGlobalSetting<T>(key: string): T | undefined;
     getGlobalSetting<T>(key: string, defaultValue?: T): T | undefined {
-        return this.globalState.get<T>(key, defaultValue);
+        if (defaultValue !== undefined) {
+            return this.globalState.get<T>(key, defaultValue);
+        }
+        return this.globalState.get<T>(key);
     }
 
     // ==================== 状态重置 ====================

@@ -94,6 +94,16 @@ export interface ERDiagramData {
     entities: EntityInfo[];
     /** 关系列表 */
     relations: RelationInfo[];
+    /** Mermaid代码 */
+    mermaidCode?: string;
+    /** 元数据 */
+    metadata?: {
+        generatedAt: string;
+        totalEntities: number;
+        totalRelations: number;
+        confidence?: number;
+        processingStats?: any;
+    };
     /** 生成时间 */
     generatedAt: Date;
     /** 项目路径 */
@@ -104,6 +114,8 @@ export interface ERDiagramData {
 export interface ConfigOptions {
     /** 自动刷新 */
     autoRefresh: boolean;
+    /** 包含测试文件 */
+    includeTestFiles: boolean;
     /** 推断策略配置 */
     inferenceStrategies: {
         naming: boolean;
