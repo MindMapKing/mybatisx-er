@@ -1,0 +1,170 @@
+/* VS Code Theme Integration */
+
+/* VS Code CSS Variables - these are automatically provided by VS Code */
+:root {
+    /* Editor colors */
+    --vscode-editor-background: var(--vscode-editor-background);
+    --vscode-editor-foreground: var(--vscode-editor-foreground);
+    --vscode-editor-font-family: var(--vscode-editor-font-family);
+    --vscode-editor-font-size: var(--vscode-editor-font-size);
+    --vscode-editor-font-weight: var(--vscode-editor-font-weight);
+    
+    /* General colors */
+    --vscode-foreground: var(--vscode-foreground);
+    --vscode-descriptionForeground: var(--vscode-descriptionForeground);
+    --vscode-errorForeground: var(--vscode-errorForeground);
+    --vscode-warningForeground: var(--vscode-warningForeground);
+    
+    /* Button colors */
+    --vscode-button-background: var(--vscode-button-background);
+    --vscode-button-foreground: var(--vscode-button-foreground);
+    --vscode-button-hoverBackground: var(--vscode-button-hoverBackground);
+    --vscode-button-activeBackground: var(--vscode-button-activeBackground);
+    --vscode-button-secondaryBackground: var(--vscode-button-secondaryBackground);
+    --vscode-button-secondaryForeground: var(--vscode-button-secondaryForeground);
+    --vscode-button-secondaryHoverBackground: var(--vscode-button-secondaryHoverBackground);
+    
+    /* Input colors */
+    --vscode-input-background: var(--vscode-input-background);
+    --vscode-input-foreground: var(--vscode-input-foreground);
+    --vscode-input-border: var(--vscode-input-border);
+    --vscode-input-placeholderForeground: var(--vscode-input-placeholderForeground);
+    
+    /* Dropdown colors */
+    --vscode-dropdown-background: var(--vscode-dropdown-background);
+    --vscode-dropdown-foreground: var(--vscode-dropdown-foreground);
+    --vscode-dropdown-border: var(--vscode-dropdown-border);
+    
+    /* List colors */
+    --vscode-list-activeSelectionBackground: var(--vscode-list-activeSelectionBackground);
+    --vscode-list-activeSelectionForeground: var(--vscode-list-activeSelectionForeground);
+    --vscode-list-inactiveSelectionBackground: var(--vscode-list-inactiveSelectionBackground);
+    --vscode-list-hoverBackground: var(--vscode-list-hoverBackground);
+    --vscode-list-focusBackground: var(--vscode-list-focusBackground);
+    
+    /* Panel colors */
+    --vscode-panel-background: var(--vscode-panel-background);
+    --vscode-panel-border: var(--vscode-panel-border);
+    
+    /* Sidebar colors */
+    --vscode-sideBar-background: var(--vscode-sideBar-background);
+    --vscode-sideBar-foreground: var(--vscode-sideBar-foreground);
+    --vscode-sideBarSectionHeader-background: var(--vscode-sideBarSectionHeader-background);
+    --vscode-sideBarSectionHeader-foreground: var(--vscode-sideBarSectionHeader-foreground);
+    
+    /* Title bar colors */
+    --vscode-titleBar-activeBackground: var(--vscode-titleBar-activeBackground);
+    --vscode-titleBar-activeForeground: var(--vscode-titleBar-activeForeground);
+    
+    /* Progress bar colors */
+    --vscode-progressBar-background: var(--vscode-progressBar-background);
+    --vscode-progressBar-foreground: var(--vscode-progressBar-foreground);
+    
+    /* Scrollbar colors */
+    --vscode-scrollbarSlider-background: var(--vscode-scrollbarSlider-background);
+    --vscode-scrollbarSlider-hoverBackground: var(--vscode-scrollbarSlider-hoverBackground);
+    --vscode-scrollbarSlider-activeBackground: var(--vscode-scrollbarSlider-activeBackground);
+    
+    /* Focus border */
+    --vscode-focusBorder: var(--vscode-focusBorder);
+    
+    /* Badge colors */
+    --vscode-badge-background: var(--vscode-badge-background);
+    --vscode-badge-foreground: var(--vscode-badge-foreground);
+    
+    /* Text colors */
+    --vscode-textCodeBlock-background: var(--vscode-textCodeBlock-background);
+    --vscode-textPreformat-foreground: var(--vscode-textPreformat-foreground);
+    
+    /* Editor hover widget */
+    --vscode-editorHoverWidget-background: var(--vscode-editorHoverWidget-background);
+    --vscode-editorHoverWidget-foreground: var(--vscode-editorHoverWidget-foreground);
+    --vscode-editorHoverWidget-border: var(--vscode-editorHoverWidget-border);
+    
+    /* Editor find match highlight */
+    --vscode-editor-findMatchHighlightBackground: var(--vscode-editor-findMatchHighlightBackground);
+    
+    /* Testing icons */
+    --vscode-testing-iconPassed: var(--vscode-testing-iconPassed);
+    --vscode-testing-iconQueued: var(--vscode-testing-iconQueued);
+    --vscode-testing-iconFailed: var(--vscode-testing-iconFailed);
+    
+    /* Toolbar hover */
+    --vscode-toolbar-hoverBackground: var(--vscode-toolbar-hoverBackground);
+}
+
+/* Font family fallbacks for better compatibility */
+body {
+    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif);
+    font-size: var(--vscode-font-size, 13px);
+    font-weight: var(--vscode-font-weight, normal);
+    line-height: var(--vscode-font-lineHeight, 1.4);
+}
+
+/* Code font family */
+code,
+pre,
+.code-block {
+    font-family: var(--vscode-editor-font-family, 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace);
+    font-size: var(--vscode-editor-font-size, 12px);
+}
+
+/* Ensure proper text rendering */
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    * {
+        border-color: var(--vscode-contrastBorder, transparent) !important;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Dark theme specific adjustments */
+@media (prefers-color-scheme: dark) {
+    /* Additional dark theme specific styles if needed */
+}
+
+/* Light theme specific adjustments */
+@media (prefers-color-scheme: light) {
+    /* Additional light theme specific styles if needed */
+}
+
+/* Focus visible for better accessibility */
+*:focus-visible {
+    outline: 2px solid var(--vscode-focusBorder);
+    outline-offset: 2px;
+}
+
+/* Remove default focus outline for mouse users */
+*:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Ensure proper color inheritance */
+* {
+    color: inherit;
+}
+
+/* Selection colors */
+::selection {
+    background-color: var(--vscode-editor-selectionBackground, rgba(173, 214, 255, 0.3));
+    color: var(--vscode-editor-selectionForeground, inherit);
+}
+
+::-moz-selection {
+    background-color: var(--vscode-editor-selectionBackground, rgba(173, 214, 255, 0.3));
+    color: var(--vscode-editor-selectionForeground, inherit);
+} 

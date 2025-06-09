@@ -1,0 +1,199 @@
+{
+  "name": "mybatis-er-generator",
+  "displayName": "MyBatis ER Generator",
+  "description": "Generate ER diagrams for MyBatis/MyBatis-Plus projects with intelligent relationship inference",
+  "version": "0.1.0",
+  "publisher": "mybatisx-er",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "mybatis",
+    "mybatis-plus",
+    "er-diagram",
+    "database",
+    "entity-relationship",
+    "mermaid"
+  ],
+  "activationEvents": [
+    "onLanguage:java",
+    "onLanguage:xml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mybatis-er.generate",
+        "title": "生成 MyBatis ER 图",
+        "category": "MyBatis ER",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "mybatis-er.refresh",
+        "title": "刷新 ER 图",
+        "category": "MyBatis ER",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mybatis-er.export",
+        "title": "导出 ER 图",
+        "category": "MyBatis ER",
+        "icon": "$(export)"
+      },
+      {
+        "command": "mybatis-er.settings",
+        "title": "ER 图设置",
+        "category": "MyBatis ER",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "mybatis-er.status",
+        "title": "显示状态信息",
+        "category": "MyBatis ER",
+        "icon": "$(info)"
+      },
+      {
+        "command": "mybatis-er.clearCache",
+        "title": "清除缓存",
+        "category": "MyBatis ER",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "mybatis-er.testWebView",
+        "title": "测试WebView界面",
+        "category": "MyBatis ER",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "mybatis-er.performanceBenchmark",
+        "title": "运行性能基准测试",
+        "category": "MyBatis ER",
+        "icon": "$(dashboard)"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "mybatis-er.erDiagramView",
+          "name": "MyBatis ER 图",
+          "type": "webview",
+          "contextualTitle": "MyBatis ER 图",
+          "when": "workspaceFolderCount > 0"
+        }
+      ]
+    },
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "mybatis-er.generate",
+          "when": "explorerResourceIsFolder",
+          "group": "mybatis-er"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mybatis-er.generate",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.refresh",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.export",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.status",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.clearCache",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.testWebView",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.performanceBenchmark",
+          "when": "workspaceFolderCount > 0"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "mybatis-er.generate",
+          "when": "view == mybatis-er.erDiagramView",
+          "group": "navigation"
+        },
+        {
+          "command": "mybatis-er.refresh",
+          "when": "view == mybatis-er.erDiagramView",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "MyBatis ER Generator",
+      "properties": {
+        "mybatis-er.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "自动刷新ER图当文件变更时"
+        },
+        "mybatis-er.inferenceStrategies": {
+          "type": "object",
+          "default": {
+            "naming": true,
+            "xml": true,
+            "annotation": true,
+            "semantic": true
+          },
+          "description": "启用的关系推断策略"
+        },
+        "mybatis-er.theme": {
+          "type": "string",
+          "enum": ["auto", "light", "dark"],
+          "default": "auto",
+          "description": "ER图主题"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "webpack --mode production",
+    "watch": "webpack --mode development --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.74.0",
+    "esbuild-loader": "^4.0.2",
+    "typescript": "^5.3.0",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.3.2",
+    "mermaid": "^10.6.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-repo/vscode-mybatis-er.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-repo/vscode-mybatis-er/issues"
+  },
+  "homepage": "https://github.com/your-repo/vscode-mybatis-er#readme",
+  "license": "MIT"
+}

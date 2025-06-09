@@ -1,0 +1,683 @@
+/* MyBatis ER WebView 主样式文件 */
+
+/* 全局样式重置 */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--vscode-foreground);
+    background-color: var(--vscode-editor-background);
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* 工具栏样式 */
+.toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background-color: var(--vscode-titleBar-activeBackground);
+    border-bottom: 1px solid var(--vscode-panel-border);
+    flex-shrink: 0;
+}
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.2s ease;
+}
+
+.toolbar-btn:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+.toolbar-btn:active {
+    background-color: var(--vscode-button-activeBackground);
+}
+
+.toolbar-btn .codicon {
+    font-size: 14px;
+}
+
+.search-input {
+    padding: 6px 8px;
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 3px;
+    font-size: 12px;
+    min-width: 200px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+}
+
+.filter-select {
+    padding: 6px 8px;
+    background-color: var(--vscode-dropdown-background);
+    color: var(--vscode-dropdown-foreground);
+    border: 1px solid var(--vscode-dropdown-border);
+    border-radius: 3px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+}
+
+/* 主要内容区域 */
+.main-content {
+    display: flex;
+    height: calc(100vh - 45px); /* 减去工具栏高度 */
+}
+
+/* 侧边栏样式 */
+.sidebar {
+    width: 280px;
+    background-color: var(--vscode-sideBar-background);
+    border-right: 1px solid var(--vscode-panel-border);
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+.sidebar-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.sidebar-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--vscode-sideBarSectionHeader-foreground);
+}
+
+/* 实体列表样式 */
+.entity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.entity-item {
+    padding: 8px 12px;
+    background-color: var(--vscode-list-inactiveSelectionBackground);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.entity-item:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.entity-item:active {
+    background-color: var(--vscode-list-activeSelectionBackground);
+}
+
+.entity-name {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 4px;
+    color: var(--vscode-list-activeSelectionForeground);
+}
+
+.entity-details {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.field-count {
+    font-weight: 500;
+}
+
+.class-name {
+    font-style: italic;
+}
+
+/* 关系统计样式 */
+.relation-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.stat-value {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--vscode-foreground);
+}
+
+.relation-types {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--vscode-panel-border);
+}
+
+.relation-type-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 0;
+    font-size: 11px;
+}
+
+.relation-type {
+    color: var(--vscode-descriptionForeground);
+}
+
+.relation-count {
+    font-weight: 500;
+    color: var(--vscode-foreground);
+}
+
+/* 图表容器样式 */
+.diagram-container {
+    flex: 1;
+    position: relative;
+    background-color: var(--vscode-editor-background);
+    overflow: auto;
+}
+
+.diagram-canvas {
+    width: 100%;
+    height: 100%;
+    padding: 20px;
+}
+
+/* Mermaid图表样式 */
+.mermaid {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100%;
+}
+
+/* 降级显示样式 */
+.fallback-diagram {
+    padding: 20px;
+    text-align: center;
+}
+
+.fallback-diagram h3 {
+    margin-bottom: 16px;
+    color: var(--vscode-foreground);
+}
+
+.fallback-diagram pre {
+    background-color: var(--vscode-textCodeBlock-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+    padding: 16px;
+    text-align: left;
+    overflow-x: auto;
+    margin-bottom: 16px;
+}
+
+.fallback-diagram code {
+    font-family: var(--vscode-editor-font-family);
+    font-size: var(--vscode-editor-font-size);
+    color: var(--vscode-textPreformat-foreground);
+}
+
+.fallback-note {
+    color: var(--vscode-descriptionForeground);
+    font-style: italic;
+    font-size: 12px;
+}
+
+/* 加载指示器样式 */
+.loading-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--vscode-editor-background);
+    z-index: 100;
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--vscode-progressBar-background);
+    border-top: 4px solid var(--vscode-progressBar-foreground);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+    color: var(--vscode-foreground);
+    font-size: 14px;
+}
+
+/* 错误指示器样式 */
+.error-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--vscode-editor-background);
+    z-index: 100;
+}
+
+.error-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.error-text {
+    color: var(--vscode-errorForeground);
+    font-size: 14px;
+    text-align: center;
+    max-width: 400px;
+}
+
+/* 空状态样式 */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    text-align: center;
+    padding: 40px;
+}
+
+.empty-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+    opacity: 0.6;
+}
+
+.empty-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--vscode-foreground);
+}
+
+.empty-description {
+    font-size: 14px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 24px;
+    max-width: 400px;
+    line-height: 1.5;
+}
+
+.empty-action {
+    padding: 10px 20px;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s ease;
+}
+
+.empty-action:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+/* 模态框样式 */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 6px;
+    min-width: 400px;
+    max-width: 600px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.modal-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--vscode-foreground);
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--vscode-foreground);
+    padding: 4px;
+    border-radius: 3px;
+    transition: background-color 0.2s ease;
+}
+
+.close-btn:hover {
+    background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.export-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.export-options label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.export-options label:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.export-options input[type="radio"] {
+    margin: 0;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--vscode-panel-border);
+}
+
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.2s ease;
+}
+
+.btn-primary {
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.btn-primary:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+.btn-secondary {
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+}
+
+.btn-secondary:hover {
+    background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 240px;
+    }
+    
+    .toolbar {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .toolbar-group {
+        flex-wrap: wrap;
+    }
+    
+    .search-input {
+        min-width: 150px;
+    }
+}
+
+@media (max-width: 600px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        height: 200px;
+        border-right: none;
+        border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    
+    .diagram-container {
+        height: calc(100vh - 245px); /* 减去工具栏和侧边栏高度 */
+    }
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--vscode-scrollbarSlider-background);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--vscode-scrollbarSlider-hoverBackground);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--vscode-scrollbarSlider-activeBackground);
+}
+
+/* 高亮和选中状态 */
+.entity-item.highlighted {
+    background-color: var(--vscode-list-focusBackground);
+    border: 1px solid var(--vscode-focusBorder);
+}
+
+.entity-item.selected {
+    background-color: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+}
+
+/* 搜索结果高亮 */
+.search-highlight {
+    background-color: var(--vscode-editor-findMatchHighlightBackground);
+    border-radius: 2px;
+    padding: 1px 2px;
+}
+
+/* 动画效果 */
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-in-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* 工具提示样式 */
+.tooltip {
+    position: relative;
+}
+
+.tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--vscode-editorHoverWidget-background);
+    color: var(--vscode-editorHoverWidget-foreground);
+    border: 1px solid var(--vscode-editorHoverWidget-border);
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+}
+
+.tooltip:hover::after {
+    opacity: 1;
+}
+
+/* 状态指示器 */
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.status-indicator.success {
+    background-color: var(--vscode-testing-iconPassed);
+}
+
+.status-indicator.warning {
+    background-color: var(--vscode-testing-iconQueued);
+}
+
+.status-indicator.error {
+    background-color: var(--vscode-testing-iconFailed);
+}
+
+/* 代码块样式 */
+.code-block {
+    background-color: var(--vscode-textCodeBlock-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+    padding: 12px;
+    font-family: var(--vscode-editor-font-family);
+    font-size: var(--vscode-editor-font-size);
+    overflow-x: auto;
+    margin: 8px 0;
+}
+
+/* 徽章样式 */
+.badge {
+    display: inline-block;
+    padding: 2px 6px;
+    background-color: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* 分隔线样式 */
+.divider {
+    height: 1px;
+    background-color: var(--vscode-panel-border);
+    margin: 12px 0;
+}
+
+/* 无障碍支持 */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+} 
