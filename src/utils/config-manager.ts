@@ -34,6 +34,7 @@ export class ConfigManager {
         
         return {
             autoRefresh: config.get<boolean>('autoRefresh', true),
+            includeTestFiles: config.get<boolean>('includeTestFiles', false),
             inferenceStrategies: config.get('inferenceStrategies', {
                 naming: true,
                 xml: true,
@@ -41,7 +42,14 @@ export class ConfigManager {
                 semantic: true
             }),
             theme: config.get<'auto' | 'light' | 'dark'>('theme', 'auto'),
-            exportFormat: config.get<'png' | 'svg' | 'pdf' | 'mermaid'>('exportFormat', 'png')
+            exportFormat: config.get<'png' | 'svg' | 'pdf' | 'mermaid'>('exportFormat', 'png'),
+            execution: config.get('execution', {
+                useWorkerThreads: false,  // 默认关闭Worker线程
+                useMainThreadSerial: true, // 默认使用主线程串行
+                maxConcurrency: 2,
+                batchSize: 5,
+                timeout: 15000
+            })
         };
     }
 

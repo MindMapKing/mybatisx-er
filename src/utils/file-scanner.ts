@@ -86,12 +86,76 @@ export interface ScanOptions {
 }
 
 /**
+ * GitIgnore模式处理器
+ */
+class GitIgnoreProcessor {
+    private patterns: string[] = [];
+    
+    constructor(gitignoreContent?: string) {
+        if (gitignoreContent) {
+            this.parseGitIgnore(gitignoreContent);
+        }
+    }
+    
+    /**
+     * 解析.gitignore文件内容
+     */
+    private parseGitIgnore(content: string): void {
+        this.patterns = content
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('#'))
+            .map(line => {
+                // 处理特殊字符
+                if (line.startsWith('/')) {
+                    line = line.substring(1);
+                }
+                if (line.endsWith('/')) {
+                    line = line + '**';
+                }
+                return line;
+            });
+    }
+    
+    /**
+     * 检查文件是否应该被忽略
+     */
+    shouldIgnore(relativePath: string): boolean {
+        return this.patterns.some(pattern => {
+            return this.matchPattern(pattern, relativePath);
+        });
+    }
+    
+    /**
+     * 模式匹配
+     */
+    private matchPattern(pattern: string, filePath: string): boolean {
+        // 简单的glob模式匹配
+        if (pattern.includes('*')) {
+            const regex = new RegExp(
+                '^' + pattern
+                    .replace(/\*\*/g, '.*')
+                    .replace(/\*/g, '[^/]*')
+                    .replace(/\?/g, '[^/]')
+                    .replace(/\./g, '\\.')
+                + '$'
+            );
+            return regex.test(filePath);
+        }
+        
+        // 直接字符串匹配
+        return filePath.includes(pattern);
+    }
+}
+
+/**
  * 文件扫描器
  * 负责扫描工作空间中的Java和XML文件
  */
 export class FileScanner {
     private workspaceRoot: string;
     private defaultOptions: ScanOptions;
+    private gitIgnoreProcessor?: GitIgnoreProcessor;
     
     constructor(workspaceRoot?: string) {
         this.workspaceRoot = workspaceRoot || this.getWorkspaceRoot();
@@ -125,6 +189,9 @@ export class FileScanner {
         Logger.info('开始扫描工作空间文件...');
         
         try {
+            // 初始化GitIgnore处理器
+            await this.initializeGitIgnore();
+            
             const stats: ScanStats = {
                 totalFiles: 0,
                 javaFileCount: 0,
@@ -172,6 +239,25 @@ export class FileScanner {
     }
     
     /**
+     * 初始化GitIgnore处理器
+     */
+    private async initializeGitIgnore(): Promise<void> {
+        try {
+            const gitignoreFiles = await vscode.workspace.findFiles('.gitignore');
+            if (gitignoreFiles.length > 0) {
+                const gitignoreContent = await vscode.workspace.fs.readFile(gitignoreFiles[0]);
+                const gitignoreText = Buffer.from(gitignoreContent).toString('utf8');
+                this.gitIgnoreProcessor = new GitIgnoreProcessor(gitignoreText);
+                Logger.debug('已加载.gitignore文件');
+            } else {
+                Logger.debug('未找到.gitignore文件');
+            }
+        } catch (error) {
+            Logger.warn(`加载.gitignore文件失败: ${error}`);
+        }
+    }
+    
+    /**
      * 扫描指定目录
      */
     private async scanDirectory(
@@ -194,9 +280,17 @@ export class FileScanner {
                 const fullPath = path.join(dirPath, entry.name);
                 const relativePath = path.relative(this.workspaceRoot, fullPath);
                 
-                // 检查是否应该排除
+                // 1. 检查GitIgnore规则（优先级最高）
+                if (this.gitIgnoreProcessor && this.gitIgnoreProcessor.shouldIgnore(relativePath)) {
+                    stats.skippedFiles++;
+                    Logger.debug(`GitIgnore跳过: ${relativePath}`);
+                    continue;
+                }
+                
+                // 2. 检查是否应该排除（基于配置的排除模式）
                 if (this.shouldExclude(relativePath, options.excludePatterns)) {
                     stats.skippedFiles++;
+                    Logger.debug(`排除模式跳过: ${relativePath}`);
                     continue;
                 }
                 
@@ -251,6 +345,7 @@ export class FileScanner {
             // 检查是否包含测试文件
             if (!options.includeTests && this.isTestFile(relativePath)) {
                 stats.skippedFiles++;
+                Logger.debug(`测试文件跳过: ${relativePath}`);
                 return;
             }
             
@@ -276,9 +371,11 @@ export class FileScanner {
             if (ext === '.java') {
                 javaFiles.push(fileInfo);
                 stats.javaFileCount++;
+                Logger.debug(`发现Java文件: ${relativePath}`);
             } else if (ext === '.xml') {
                 xmlFiles.push(fileInfo);
                 stats.xmlFileCount++;
+                Logger.debug(`发现XML文件: ${relativePath}`);
             }
             
             stats.totalFiles++;
@@ -369,16 +466,12 @@ export class FileScanner {
     }
     
     /**
-     * 检查是否为实体类
+     * 检查是否为实体类 - 增强版本，与java-parser.ts保持一致
      */
     private isEntityClass(content: string, fileName: string): boolean {
-        // 检查注解
+        // 1. 检查类级别注解
         const entityAnnotations = [
-            '@Entity',
-            '@Table',
-            '@TableName',
-            '@Data',
-            '@Component'
+            '@Entity', '@Table', '@TableName', '@Data', '@Component'
         ];
         
         for (const annotation of entityAnnotations) {
@@ -387,14 +480,37 @@ export class FileScanner {
             }
         }
         
-        // 检查文件名模式
+        // 2. 检查字段注解
+        const fieldAnnotations = ['@Id', '@Column', '@TableId', '@TableField'];
+        for (const annotation of fieldAnnotations) {
+            if (content.includes(annotation)) {
+                return true;
+            }
+        }
+        
+        // 3. 检查getter/setter方法
+        const hasGetters = /public\s+\w+\s+get\w+\s*\(/.test(content);
+        const hasSetters = /public\s+void\s+set\w+\s*\(/.test(content);
+        
+        if (hasGetters && hasSetters) {
+            return true;
+        }
+        
+        // 4. 检查是否有私有字段
+        const hasPrivateFields = /private\s+\w+\s+\w+\s*;/.test(content);
+        if (hasPrivateFields) {
+            return true;
+        }
+        
+        // 5. 检查类名模式
         const entityPatterns = [
-            /Entity\.java$/,
-            /Model\.java$/,
-            /DO\.java$/,
-            /PO\.java$/,
-            /VO\.java$/,
-            /DTO\.java$/
+            /Entity\.java$/i,
+            /Model\.java$/i,
+            /DO\.java$/i,
+            /PO\.java$/i,
+            /VO\.java$/i,
+            /DTO\.java$/i,
+            /Bean\.java$/i
         ];
         
         for (const pattern of entityPatterns) {
@@ -403,16 +519,57 @@ export class FileScanner {
             }
         }
         
-        // 检查类声明
-        const classMatch = content.match(/public\s+class\s+(\w+)/);
-        if (classMatch) {
-            const className = classMatch[1];
-            // 检查是否有getter/setter方法
-            const hasGetters = /public\s+\w+\s+get\w+\s*\(/.test(content);
-            const hasSetters = /public\s+void\s+set\w+\s*\(/.test(content);
+        // 6. 检查包名模式
+        const packageMatch = content.match(/package\s+([\w.]+)\s*;/);
+        if (packageMatch) {
+            const packageName = packageMatch[1].toLowerCase();
+            const entityPackagePatterns = [
+                'entity', 'model', 'domain', 'pojo', 'bean', 'dto', 'vo', 'po'
+            ];
             
-            if (hasGetters && hasSetters) {
+            for (const pattern of entityPackagePatterns) {
+                if (packageName.includes(pattern)) {
+                    return true;
+                }
+            }
+        }
+        
+        // 7. 检查Serializable接口
+        if (content.includes('implements Serializable') || content.includes('extends Serializable')) {
+            return true;
+        }
+        
+        // 8. 检查实体类导入
+        const entityImports = [
+            'javax.persistence',
+            'com.baomidou.mybatisplus',
+            'org.springframework.data.jpa',
+            'lombok.Data',
+            'lombok.Entity'
+        ];
+        
+        for (const importPattern of entityImports) {
+            if (content.includes(`import ${importPattern}`)) {
                 return true;
+            }
+        }
+        
+        // 9. 宽松模式：多字段且非工具类
+        const fieldCount = (content.match(/private\s+\w+\s+\w+\s*;/g) || []).length;
+        if (fieldCount >= 2) {
+            const classNameMatch = content.match(/(?:public\s+)?class\s+(\w+)/);
+            if (classNameMatch) {
+                const className = classNameMatch[1];
+                const utilityClassPatterns = [
+                    /Util$/i, /Utils$/i, /Helper$/i, /Config$/i, /Configuration$/i,
+                    /Constants?$/i, /Factory$/i, /Builder$/i, /Manager$/i,
+                    /Service$/i, /Controller$/i, /Repository$/i, /Dao$/i
+                ];
+                
+                const isUtilityClass = utilityClassPatterns.some(pattern => pattern.test(className));
+                if (!isUtilityClass) {
+                    return true;
+                }
             }
         }
         
@@ -537,7 +694,7 @@ export class FileScanner {
     /**
      * 获取文件统计信息
      */
-    async getFileStats(filePath: string): Promise<fs.Stats> {
+    async getFileStats(filePath: string): Promise<Awaited<ReturnType<typeof fs.stat>>> {
         return await fs.stat(filePath);
     }
     
@@ -611,5 +768,15 @@ export class FileScanner {
             
             return true;
         });
+    }
+    
+    /**
+     * 获取GitIgnore状态
+     */
+    getGitIgnoreStatus(): { loaded: boolean; patternCount: number } {
+        return {
+            loaded: !!this.gitIgnoreProcessor,
+            patternCount: this.gitIgnoreProcessor ? (this.gitIgnoreProcessor as any).patterns.length : 0
+        };
     }
 } 

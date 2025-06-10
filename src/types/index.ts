@@ -127,6 +127,19 @@ export interface ConfigOptions {
     theme: 'auto' | 'light' | 'dark';
     /** 导出格式 */
     exportFormat: 'png' | 'svg' | 'pdf' | 'mermaid';
+    /** Worker执行模式配置 */
+    execution: {
+        /** 是否启用Worker线程模式 */
+        useWorkerThreads: boolean;
+        /** 主线程串行模式（默认） */
+        useMainThreadSerial: boolean;
+        /** 最大并发数（Worker模式下） */
+        maxConcurrency: number;
+        /** 批处理大小 */
+        batchSize: number;
+        /** 超时时间（毫秒） */
+        timeout: number;
+    };
 }
 
 // Worker消息类型

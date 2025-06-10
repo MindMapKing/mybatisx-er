@@ -294,9 +294,9 @@ class WorkerThread {
                 }
                 
                 // 添加小延迟避免CPU占用过高
-                if (processed % 3 === 0) {
-                    await this.sleep(5);
-                }
+                // if (processed % 3 === 0) {
+                //     await this.sleep(5);
+                // }
             }
         }
         
@@ -338,9 +338,9 @@ class WorkerThread {
                 }
                 
                 // 添加小延迟避免CPU占用过高
-                if (processed % 3 === 0) {
-                    await this.sleep(5);
-                }
+                // if (processed % 3 === 0) {
+                //     await this.sleep(5);
+                // }
             }
         }
         

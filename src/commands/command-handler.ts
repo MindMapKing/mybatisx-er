@@ -33,15 +33,44 @@ export class CommandHandler {
     }
 
     /**
-     * 初始化Worker管理器
+     * 初始化Worker管理器 - 智能初始化
      */
     async initialize(): Promise<void> {
         try {
-            await this.workerManager.start();
-            Logger.info('Worker管理器初始化完成');
+            // 获取执行配置
+            const config = this.configManager.getExtensionConfig();
+            const executionConfig = config.execution;
+            
+            // 只有在需要Worker线程模式时才启动WorkerManager
+            if (executionConfig.useWorkerThreads && !executionConfig.useMainThreadSerial) {
+                Logger.info('配置为Worker线程模式，启动Worker管理器');
+                await this.workerManager.start();
+                Logger.info('Worker管理器初始化完成');
+            } else {
+                Logger.info('配置为主线程串行模式，跳过Worker管理器启动');
+                Logger.info('Worker管理器将在需要时延迟初始化');
+            }
         } catch (error) {
             Logger.error('Worker管理器初始化失败', error as Error);
             throw error;
+        }
+    }
+
+    /**
+     * 确保Worker管理器已启动（延迟初始化）
+     */
+    private async ensureWorkerManagerStarted(): Promise<void> {
+        const config = this.configManager.getExtensionConfig();
+        const executionConfig = config.execution;
+        
+        // 如果配置为Worker模式但Worker管理器未启动，则启动它
+        if (executionConfig.useWorkerThreads && !executionConfig.useMainThreadSerial) {
+            const workerStats = this.workerManager.getStats();
+            if (workerStats.activeWorkers === 0 && workerStats.idleWorkers === 0) {
+                Logger.info('延迟启动Worker管理器');
+                await this.workerManager.start();
+                Logger.info('Worker管理器延迟初始化完成');
+            }
         }
     }
 
@@ -50,8 +79,14 @@ export class CommandHandler {
      */
     async dispose(): Promise<void> {
         try {
-            await this.workerManager.shutdown();
-            Logger.info('Worker管理器已关闭');
+            // 检查Worker管理器是否已启动
+            const workerStats = this.workerManager.getStats();
+            if (workerStats.activeWorkers > 0 || workerStats.idleWorkers > 0) {
+                await this.workerManager.shutdown();
+                Logger.info('Worker管理器已关闭');
+            } else {
+                Logger.info('Worker管理器未启动，跳过关闭操作');
+            }
         } catch (error) {
             Logger.error('Worker管理器关闭失败', error as Error);
         }
@@ -210,12 +245,38 @@ export class CommandHandler {
             return [];
         }
         
+        const config = this.configManager.getExtensionConfig();
+        const executionConfig = config.execution;
+        
+        // 根据配置选择执行模式
+        if (executionConfig.useWorkerThreads && !executionConfig.useMainThreadSerial) {
+            Logger.info('使用Worker线程模式处理Java文件');
+            return this.batchProcessJavaFilesWorker(javaFiles, progress, token, startProgress, progressRange);
+        } else {
+            Logger.info('使用主线程串行模式处理Java文件（推荐）');
+            return this.batchProcessJavaFilesSerial(javaFiles, progress, token, startProgress, progressRange);
+        }
+    }
+
+    /**
+     * Worker线程模式处理Java文件
+     */
+    private async batchProcessJavaFilesWorker(
+        javaFiles: any[],
+        progress: vscode.Progress<{ increment?: number; message?: string }>,
+        token: vscode.CancellationToken,
+        startProgress: number,
+        progressRange: number
+    ): Promise<any[]> {
+        // 确保Worker管理器已启动
+        await this.ensureWorkerManagerStarted();
+        
         const results: any[] = [];
-        // 进一步减少批次大小，避免超时
-        const batchSize = Math.min(3, Math.max(1, Math.floor(javaFiles.length / 4))); 
+        const config = this.configManager.getExtensionConfig();
+        const batchSize = Math.min(config.execution.batchSize, Math.max(1, Math.floor(javaFiles.length / 4))); 
         const batches = this.chunkArray(javaFiles, batchSize);
         
-        Logger.info(`批量处理Java文件: ${javaFiles.length}个文件，${batches.length}个批次`);
+        Logger.info(`Worker模式批量处理Java文件: ${javaFiles.length}个文件，${batches.length}个批次`);
         
         for (let i = 0; i < batches.length; i++) {
             if (token.isCancellationRequested) {
@@ -227,7 +288,7 @@ export class CommandHandler {
             
             progress.report({ 
                 increment: batchProgress, 
-                message: `处理Java文件批次 ${i + 1}/${batches.length} (${batch.length}个文件)` 
+                message: `Worker处理Java文件批次 ${i + 1}/${batches.length} (${batch.length}个文件)` 
             });
             
             try {
@@ -241,12 +302,12 @@ export class CommandHandler {
                     }))
                 );
                 
-                // 提交批量任务 - 大幅减少超时时间
+                // 提交批量任务
                 const batchResult = await this.workerManager.submitTask(
                     WorkerMessageType.PARSE_BATCH_FILES,
                     { files: batchData },
                     { 
-                        timeout: Math.min(8000, 3000 * batch.length), // 减少到8秒最大，每个文件3秒
+                        timeout: config.execution.timeout,
                         maxRetries: 1 
                     }
                 );
@@ -257,10 +318,10 @@ export class CommandHandler {
                     results.push(batchResult);
                 }
                 
-                Logger.debug(`批次 ${i + 1} 处理完成，解析了 ${batch.length} 个文件`);
+                Logger.debug(`Worker批次 ${i + 1} 处理完成，解析了 ${batch.length} 个文件`);
                 
             } catch (error) {
-                Logger.warn(`批量处理Java文件失败，尝试降级处理`, error as Error);
+                Logger.warn(`Worker批量处理Java文件失败，尝试降级处理`, error as Error);
                 
                 // 降级到逐个同步处理
                 for (const file of batch) {
@@ -288,6 +349,60 @@ export class CommandHandler {
         
         return results;
     }
+
+    /**
+     * 主线程串行模式处理Java文件（推荐）
+     */
+    private async batchProcessJavaFilesSerial(
+        javaFiles: any[],
+        progress: vscode.Progress<{ increment?: number; message?: string }>,
+        token: vscode.CancellationToken,
+        startProgress: number,
+        progressRange: number
+    ): Promise<any[]> {
+        const results: any[] = [];
+        const config = this.configManager.getExtensionConfig();
+        
+        Logger.info(`主线程串行处理Java文件: ${javaFiles.length}个文件`);
+        
+        for (let i = 0; i < javaFiles.length; i++) {
+            if (token.isCancellationRequested) {
+                throw new Error('用户取消了操作');
+            }
+            
+            const file = javaFiles[i];
+            const fileProgress = startProgress + (i * progressRange / javaFiles.length);
+            
+            progress.report({ 
+                increment: fileProgress, 
+                message: `主线程解析Java文件 ${i + 1}/${javaFiles.length}: ${file.filePath.split('/').pop()}` 
+            });
+            
+            try {
+                const content = await this.fileScanner.getFileContent(file.filePath);
+                const parseResult = await this.parseJavaFileSync({
+                    filePath: file.filePath,
+                    content,
+                    fileType: 'java',
+                    options: { parseMethodBodies: false }
+                });
+                results.push(parseResult);
+                
+                Logger.debug(`主线程解析完成: ${file.filePath}`);
+                
+            } catch (error) {
+                Logger.warn(`主线程解析Java文件失败: ${file.filePath}`, error as Error);
+                // 继续处理其他文件，不中断整个流程
+            }
+            
+            // 每处理几个文件后稍作延迟，避免阻塞UI
+            if (i % 5 === 0 && i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+        }
+        
+        return results;
+    }
     
     /**
      * 新增：批量处理XML文件
@@ -303,12 +418,38 @@ export class CommandHandler {
             return [];
         }
         
+        const config = this.configManager.getExtensionConfig();
+        const executionConfig = config.execution;
+        
+        // 根据配置选择执行模式
+        if (executionConfig.useWorkerThreads && !executionConfig.useMainThreadSerial) {
+            Logger.info('使用Worker线程模式处理XML文件');
+            return this.batchProcessXmlFilesWorker(xmlFiles, progress, token, startProgress, progressRange);
+        } else {
+            Logger.info('使用主线程串行模式处理XML文件（推荐）');
+            return this.batchProcessXmlFilesSerial(xmlFiles, progress, token, startProgress, progressRange);
+        }
+    }
+
+    /**
+     * Worker线程模式处理XML文件
+     */
+    private async batchProcessXmlFilesWorker(
+        xmlFiles: any[],
+        progress: vscode.Progress<{ increment?: number; message?: string }>,
+        token: vscode.CancellationToken,
+        startProgress: number,
+        progressRange: number
+    ): Promise<any[]> {
+        // 确保Worker管理器已启动
+        await this.ensureWorkerManagerStarted();
+        
         const results: any[] = [];
-        // 进一步减少批次大小
-        const batchSize = Math.min(4, Math.max(1, Math.floor(xmlFiles.length / 3))); 
+        const config = this.configManager.getExtensionConfig();
+        const batchSize = Math.min(config.execution.batchSize, Math.max(1, Math.floor(xmlFiles.length / 3))); 
         const batches = this.chunkArray(xmlFiles, batchSize);
         
-        Logger.info(`批量处理XML文件: ${xmlFiles.length}个文件，${batches.length}个批次`);
+        Logger.info(`Worker模式批量处理XML文件: ${xmlFiles.length}个文件，${batches.length}个批次`);
         
         for (let i = 0; i < batches.length; i++) {
             if (token.isCancellationRequested) {
@@ -320,7 +461,7 @@ export class CommandHandler {
             
             progress.report({ 
                 increment: batchProgress, 
-                message: `处理XML文件批次 ${i + 1}/${batches.length} (${batch.length}个文件)` 
+                message: `Worker处理XML文件批次 ${i + 1}/${batches.length} (${batch.length}个文件)` 
             });
             
             try {
@@ -333,12 +474,12 @@ export class CommandHandler {
                     }))
                 );
                 
-                // 提交批量任务 - 减少超时时间
+                // 提交批量任务
                 const batchResult = await this.workerManager.submitTask(
                     WorkerMessageType.PARSE_BATCH_FILES,
                     { files: batchData },
                     { 
-                        timeout: Math.min(6000, 2000 * batch.length), // 减少到6秒最大，每个文件2秒
+                        timeout: config.execution.timeout,
                         maxRetries: 1 
                     }
                 );
@@ -349,10 +490,10 @@ export class CommandHandler {
                     results.push(batchResult);
                 }
                 
-                Logger.debug(`XML批次 ${i + 1} 处理完成，解析了 ${batch.length} 个文件`);
+                Logger.debug(`Worker XML批次 ${i + 1} 处理完成，解析了 ${batch.length} 个文件`);
                 
             } catch (error) {
-                Logger.warn(`批量处理XML文件失败，尝试降级处理`, error as Error);
+                Logger.warn(`Worker批量处理XML文件失败，尝试降级处理`, error as Error);
                 
                 // 降级到逐个同步处理
                 for (const file of batch) {
@@ -379,6 +520,59 @@ export class CommandHandler {
         
         return results;
     }
+
+    /**
+     * 主线程串行模式处理XML文件（推荐）
+     */
+    private async batchProcessXmlFilesSerial(
+        xmlFiles: any[],
+        progress: vscode.Progress<{ increment?: number; message?: string }>,
+        token: vscode.CancellationToken,
+        startProgress: number,
+        progressRange: number
+    ): Promise<any[]> {
+        const results: any[] = [];
+        const config = this.configManager.getExtensionConfig();
+        
+        Logger.info(`主线程串行处理XML文件: ${xmlFiles.length}个文件`);
+        
+        for (let i = 0; i < xmlFiles.length; i++) {
+            if (token.isCancellationRequested) {
+                throw new Error('用户取消了操作');
+            }
+            
+            const file = xmlFiles[i];
+            const fileProgress = startProgress + (i * progressRange / xmlFiles.length);
+            
+            progress.report({ 
+                increment: fileProgress, 
+                message: `主线程解析XML文件 ${i + 1}/${xmlFiles.length}: ${file.filePath.split('/').pop()}` 
+            });
+            
+            try {
+                const content = await this.fileScanner.getFileContent(file.filePath);
+                const parseResult = await this.parseXmlFileSync({
+                    filePath: file.filePath,
+                    content,
+                    fileType: 'xml'
+                });
+                results.push(parseResult);
+                
+                Logger.debug(`主线程XML解析完成: ${file.filePath}`);
+                
+            } catch (error) {
+                Logger.warn(`主线程解析XML文件失败: ${file.filePath}`, error as Error);
+                // 继续处理其他文件，不中断整个流程
+            }
+            
+            // 每处理几个文件后稍作延迟，避免阻塞UI
+            if (i % 3 === 0 && i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+        }
+        
+        return results;
+    }
     
     /**
      * 新增：执行关系推断
@@ -393,30 +587,43 @@ export class CommandHandler {
         }
         
         try {
-            // 转换配置格式
-            const configStrategies = this.configManager.getExtensionConfig().inferenceStrategies;
-            const strategies = [
-                { name: 'naming-convention', weight: 0.8, enabled: configStrategies.naming, minConfidence: 0.6 },
-                { name: 'annotation-based', weight: 0.9, enabled: configStrategies.annotation, minConfidence: 0.7 },
-                { name: 'xml-mapping', weight: 0.85, enabled: configStrategies.xml, minConfidence: 0.75 },
-                { name: 'field-type-analysis', weight: 0.7, enabled: configStrategies.semantic, minConfidence: 0.5 }
-            ];
+            // 检查是否需要使用Worker模式
+            const config = this.configManager.getExtensionConfig();
+            const executionConfig = config.execution;
             
-            // 使用单个任务进行关系推断，避免创建多个Worker
-            const relationResult = await this.workerManager.submitTask(
-                WorkerMessageType.INFER_RELATIONS,
-                {
-                    entities: javaResults.filter(r => r && r.success !== false),
-                    mappings: xmlResults.filter(r => r && r.success !== false),
-                    strategies
-                },
-                { 
-                    timeout: 15000, // 关系推断可能需要更长时间
-                    maxRetries: 1 
-                }
-            );
-            
-            return relationResult;
+            if (executionConfig.useWorkerThreads && !executionConfig.useMainThreadSerial) {
+                // 确保Worker管理器已启动
+                await this.ensureWorkerManagerStarted();
+                
+                // 转换配置格式
+                const configStrategies = this.configManager.getExtensionConfig().inferenceStrategies;
+                const strategies = [
+                    { name: 'naming-convention', weight: 0.8, enabled: configStrategies.naming, minConfidence: 0.6 },
+                    { name: 'annotation-based', weight: 0.9, enabled: configStrategies.annotation, minConfidence: 0.7 },
+                    { name: 'xml-mapping', weight: 0.85, enabled: configStrategies.xml, minConfidence: 0.75 },
+                    { name: 'field-type-analysis', weight: 0.7, enabled: configStrategies.semantic, minConfidence: 0.5 }
+                ];
+                
+                // 使用单个任务进行关系推断，避免创建多个Worker
+                const relationResult = await this.workerManager.submitTask(
+                    WorkerMessageType.INFER_RELATIONS,
+                    {
+                        entities: javaResults.filter(r => r && r.success !== false),
+                        mappings: xmlResults.filter(r => r && r.success !== false),
+                        strategies
+                    },
+                    { 
+                        timeout: 15000, // 关系推断可能需要更长时间
+                        maxRetries: 1 
+                    }
+                );
+                
+                return relationResult;
+            } else {
+                // 直接使用同步推断
+                Logger.info('使用主线程模式进行关系推断');
+                return this.performRelationInferenceSync(javaResults, xmlResults);
+            }
             
         } catch (error) {
             Logger.warn('Worker关系推断失败，尝试同步推断', error as Error);
@@ -466,20 +673,47 @@ export class CommandHandler {
     }
     
     /**
-     * 新增：同步Java文件解析（降级方案）
+     * 新增：同步Java文件解析（主线程模式，支持VS Code API）
      */
     private async parseJavaFileSync(fileData: any): Promise<any> {
         try {
-            // 简化的同步解析逻辑
+            // 使用增强的Java解析器，支持LSP和VS Code API
             const { SmartJavaParser } = await import('../parsers/java-parser');
             const parser = new SmartJavaParser();
-            return await parser.parseJavaFile(fileData.filePath, fileData.content);
+            
+            // 主线程模式下可以使用VS Code API和LSP
+            const result = await parser.parseJavaFile(fileData.filePath, fileData.content);
+            
+            if (result) {
+                Logger.debug(`主线程Java解析完成: ${fileData.filePath}`, {
+                    parseMethod: result.parseMethod,
+                    confidence: result.confidence,
+                    className: result.className,
+                    fieldCount: result.fields?.length || 0
+                });
+                
+                return {
+                    ...result,
+                    filePath: fileData.filePath,
+                    success: true,
+                    executionMode: 'main-thread'
+                };
+            } else {
+                Logger.debug(`主线程Java解析未找到实体: ${fileData.filePath}`);
+                return {
+                    filePath: fileData.filePath,
+                    success: false,
+                    reason: 'not-entity-class',
+                    executionMode: 'main-thread'
+                };
+            }
         } catch (error) {
-            Logger.warn(`同步Java解析失败: ${fileData.filePath}`, error as Error);
+            Logger.warn(`主线程Java解析失败: ${fileData.filePath}`, error as Error);
             return {
                 filePath: fileData.filePath,
                 error: (error as Error).message,
-                success: false
+                success: false,
+                executionMode: 'main-thread'
             };
         }
     }

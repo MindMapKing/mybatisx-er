@@ -396,6 +396,10 @@ export class WorkerManager extends EventEmitter {
                 workerData: {
                     workerId,
                     config: this.config
+                },
+                env: {
+                    ...process.env,
+                    NODE_ENV: 'worker'  // 设置环境变量标识 Worker 线程
                 }
             });
             

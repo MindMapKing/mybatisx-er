@@ -139,6 +139,13 @@ export class StateManager {
                 },
                 theme: 'auto',
                 exportFormat: 'png',
+                execution: {
+                    useWorkerThreads: false,
+                    useMainThreadSerial: true,
+                    maxConcurrency: 4,
+                    batchSize: 10,
+                    timeout: 30000
+                },
                 ...config
             };
         } catch (error) {
@@ -154,7 +161,14 @@ export class StateManager {
                     semantic: true
                 },
                 theme: 'auto',
-                exportFormat: 'png'
+                exportFormat: 'png',
+                execution: {
+                    useWorkerThreads: false,
+                    useMainThreadSerial: true,
+                    maxConcurrency: 4,
+                    batchSize: 10,
+                    timeout: 30000
+                }
             };
         }
     }

@@ -106,6 +106,39 @@ export async function activate(context: vscode.ExtensionContext) {
         () => commandHandler.handleSimpleTest()
     );
 
+    // 注册命令：Java扩展诊断
+    const javaExtensionDiagnosticCommand = vscode.commands.registerCommand('mybatis-er.javaExtensionDiagnostic', 
+        async () => {
+            const { quickJavaExtensionDiagnostic } = await import('./commands/java-extension-diagnostic');
+            return quickJavaExtensionDiagnostic();
+        }
+    );
+
+    // 注册命令：测试Worker线程修复
+    const testWorkerThreadFixCommand = vscode.commands.registerCommand('mybatis-er.testWorkerThreadFix', 
+        async () => {
+            const { testWorkerThreadFix } = await import('./commands/test-worker-thread-fix');
+            return testWorkerThreadFix();
+        }
+    );
+
+    // 注册命令：测试VS Code API加载
+    const testVSCodeAPILoadingCommand = vscode.commands.registerCommand('mybatis-er.testVSCodeAPILoading', 
+        async () => {
+            const { testVSCodeAPILoading } = await import('./commands/test-vscode-api-loading');
+            return testVSCodeAPILoading();
+        }
+    );
+
+    // 注册命令：快速VS Code API测试
+    const quickVSCodeTestCommand = vscode.commands.registerCommand('mybatis-er.quickVSCodeTest', 
+        async () => {
+            const { quickVSCodeTest, testJavaParserVSCodeAPI } = await import('./commands/quick-vscode-test');
+            await quickVSCodeTest();
+            await testJavaParserVSCodeAPI();
+        }
+    );
+
     // 监听配置变更
     const configChangeDisposable = configManager.onConfigChanged((newConfig) => {
         Logger.info('配置已变更，重新应用设置', newConfig);
@@ -136,6 +169,10 @@ export async function activate(context: vscode.ExtensionContext) {
         testWebViewCommand,
         performanceBenchmarkCommand,
         simpleTestCommand,
+        javaExtensionDiagnosticCommand,
+        testWorkerThreadFixCommand,
+        testVSCodeAPILoadingCommand,
+        quickVSCodeTestCommand,
         configChangeDisposable,
         workspaceChangeDisposable,
         // 添加清理函数

@@ -79,6 +79,30 @@
         "title": "简单功能测试",
         "category": "MyBatis ER",
         "icon": "$(check)"
+      },
+      {
+        "command": "mybatis-er.javaExtensionDiagnostic",
+        "title": "Java扩展诊断",
+        "category": "MyBatis ER",
+        "icon": "$(search)"
+      },
+      {
+        "command": "mybatis-er.testWorkerThreadFix",
+        "title": "测试Worker线程修复",
+        "category": "MyBatis ER",
+        "icon": "$(bug)"
+      },
+      {
+        "command": "mybatis-er.testVSCodeAPILoading",
+        "title": "测试VS Code API加载",
+        "category": "MyBatis ER",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "mybatis-er.quickVSCodeTest",
+        "title": "快速VS Code API测试",
+        "category": "MyBatis ER",
+        "icon": "$(zap)"
       }
     ],
     "views": {
@@ -132,6 +156,22 @@
         {
           "command": "mybatis-er.simpleTest",
           "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.javaExtensionDiagnostic",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.testWorkerThreadFix",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.testVSCodeAPILoading",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "mybatis-er.quickVSCodeTest",
+          "when": "workspaceFolderCount > 0"
         }
       ],
       "view/title": [
@@ -170,6 +210,61 @@
           "enum": ["auto", "light", "dark"],
           "default": "auto",
           "description": "ER图主题"
+        },
+        "mybatis-er.includeTestFiles": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否包含测试文件"
+        },
+        "mybatis-er.exportFormat": {
+          "type": "string",
+          "enum": ["png", "svg", "pdf", "mermaid"],
+          "default": "png",
+          "description": "导出格式"
+        },
+        "mybatis-er.execution": {
+          "type": "object",
+          "default": {
+            "useWorkerThreads": false,
+            "useMainThreadSerial": true,
+            "maxConcurrency": 2,
+            "batchSize": 5,
+            "timeout": 15000
+          },
+          "properties": {
+            "useWorkerThreads": {
+              "type": "boolean",
+              "default": false,
+              "description": "是否启用Worker线程模式（可能无法使用VS Code API）"
+            },
+            "useMainThreadSerial": {
+              "type": "boolean",
+              "default": true,
+              "description": "使用主线程串行模式（推荐，可使用VS Code API）"
+            },
+            "maxConcurrency": {
+              "type": "number",
+              "default": 2,
+              "minimum": 1,
+              "maximum": 8,
+              "description": "最大并发数（Worker模式下）"
+            },
+            "batchSize": {
+              "type": "number",
+              "default": 5,
+              "minimum": 1,
+              "maximum": 20,
+              "description": "批处理大小"
+            },
+            "timeout": {
+              "type": "number",
+              "default": 15000,
+              "minimum": 5000,
+              "maximum": 60000,
+              "description": "超时时间（毫秒）"
+            }
+          },
+          "description": "执行模式配置"
         }
       }
     }
